@@ -624,3 +624,56 @@
     gap: 42px;
   }
 }
+
+/* Correção: exibir as cinco linhas completas no tanque do topo */
+.hero-grid {
+  grid-template-rows: repeat(5, minmax(0, 1fr));
+  min-height: 0;
+}
+.hero-grid .manual-grid-cell {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* GIFs demonstrativos abaixo dos exemplos de movimento */
+.rule-animation {
+  margin: 14px 0 0;
+  padding: 10px;
+  border: 1px solid rgba(102, 214, 202, .12);
+  border-radius: 15px;
+  background: rgba(0, 0, 0, .18);
+}
+.rule-animation img {
+  display: block;
+  width: min(100%, 230px);
+  height: auto;
+  aspect-ratio: 1;
+  margin: 0 auto;
+  border-radius: 11px;
+  object-fit: contain;
+}
+
+/* Logo centralizado no cabeçalho */
+.manual-topbar {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+.manual-brand {
+  grid-column: 2;
+  justify-self: center;
+}
+.manual-top-actions {
+  grid-column: 3;
+  justify-self: end;
+}
+
+@media (max-width: 720px) {
+  .manual-brand {
+    width: 112px;
+  }
+  .manual-top-actions {
+    gap: 4px;
+  }
+  .rule-animation img {
+    width: min(100%, 210px);
+  }
+}

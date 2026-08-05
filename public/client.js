@@ -52,6 +52,10 @@
   let serverConnected = socket.connected;
   let reconnectingToRoom = false;
 
+  function isCompactMobile() {
+    return layout === 'mobile' || window.matchMedia('(max-width: 720px)').matches;
+  }
+
   function loadIdentity() {
     try {
       const stored = JSON.parse(localStorage.getItem('carpasIdentity')) || {};
@@ -627,13 +631,25 @@
         <div class="movement-dots" style="--moves-count:${totalMoves}">${dots}</div>
         <p class="instruction">${instruction}</p>
         <div class="coin-rule-note"><img src="${ASSETS.coin}" alt=""><span><strong>${state.constants.extraMoveCost} moedas</strong> compram 1 movimento extra. As moedas gastas são abatidas.</span></div>
-        ${canFinish ? '<button id="finishMovement" class="primary-button">Concluir movimentação</button>' : ''}
-        ${current.movementReady && waitingForOtherPlayersMessage() ? '<button class="secondary-button try-next-phase" data-wait-phase="movement">Continuar para a próxima fase</button>' : ''}
+        ${!isCompactMobile() && canFinish ? '<button id="finishMovement" class="primary-button">Concluir movimentação</button>' : ''}
+        ${!isCompactMobile() && current.movementReady && waitingForOtherPlayersMessage() ? '<button class="secondary-button try-next-phase" data-wait-phase="movement">Continuar para a próxima fase</button>' : ''}
         <p class="movement-alert ${movementError ? 'visible' : ''}" role="alert" aria-live="assertive">${movementError ? escapeHtml(movementError) : '&nbsp;'}</p>
       </section>`;
   }
 
 
+
+  function mobilePhaseActionHtml(current) {
+    if (!isCompactMobile() || state.phase !== 'movement') return '';
+    const canFinish = current.movesRemaining === 0 && !current.mustMoveCarp && !current.correctionRequired && !current.movementReady;
+    if (canFinish) {
+      return '<section class="mobile-phase-confirm-slot"><button id="finishMovement" class="primary-button">Concluir movimentação</button></section>';
+    }
+    if (current.movementReady && waitingForOtherPlayersMessage()) {
+      return '<section class="mobile-phase-confirm-slot"><button class="secondary-button try-next-phase" data-wait-phase="movement">Continuar para a próxima fase</button></section>';
+    }
+    return '';
+  }
 
   function developmentPanel(current) {
     const dev = current.development;
@@ -842,6 +858,7 @@
             </header>
             ${boardHtml(current, { interactive: state.phase === 'movement' || state.phase === 'development' })}
           </section>
+          ${mobilePhaseActionHtml(current)}
           <aside class="right-rail">${panel}${logPanelHtml()}</aside>
         </main>
       </div>`;

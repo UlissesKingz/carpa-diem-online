@@ -1370,3 +1370,312 @@ body { padding-bottom: 24px; }
   .contact-actions { grid-template-columns: 1fr; }
   body { padding-bottom: 20px; }
 }
+
+/* Correção final da versão vertical mobile: cabeçalho e sequência da partida. */
+@media (max-width: 720px) {
+  /* Cabeçalho: logo centralizado e controles em uma linha sem sobreposição. */
+  .game-shell .topbar {
+    position: relative;
+    top: 0;
+    display: grid !important;
+    grid-template-columns: 1fr;
+    grid-template-rows: 42px auto;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-height: 0;
+    padding: 7px 8px 8px;
+    overflow: visible;
+    white-space: normal;
+  }
+
+  .game-shell .topbar-brand {
+    display: grid !important;
+    grid-column: 1;
+    grid-row: 1;
+    place-items: center;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .game-shell .topbar-logo {
+    width: min(164px, 46vw);
+    height: 38px;
+    object-fit: contain;
+  }
+
+  .game-shell .topbar-status {
+    position: absolute;
+    left: 9px;
+    top: 10px;
+    z-index: 2;
+    display: flex !important;
+    width: auto;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+
+  .game-shell .topbar-status .eyebrow {
+    display: block;
+    max-width: 72px;
+    margin: 0;
+    font-size: .54rem;
+    line-height: 1.15;
+  }
+
+  .game-shell .topbar-status > strong,
+  .game-shell .topbar-status .phase-pill {
+    display: none !important;
+  }
+
+  .game-shell .topbar-controls {
+    grid-column: 1;
+    grid-row: 2;
+    display: flex !important;
+    flex-flow: row nowrap;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .game-shell .topbar-controls::-webkit-scrollbar { display: none; }
+
+  .game-shell .topbar-actions {
+    display: flex !important;
+    flex: 0 1 auto;
+    flex-flow: row nowrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: auto;
+    min-width: 0;
+  }
+
+  .game-shell .top-action {
+    flex: 0 0 auto;
+    min-height: 29px;
+    padding: 0 6px;
+    border-radius: 8px;
+    font-size: .54rem;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .game-shell .top-action > span { display: none; }
+
+  .game-shell .topbar-identity {
+    display: flex !important;
+    flex: 0 0 auto;
+    flex-flow: row nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 4px;
+    width: auto;
+    min-width: 0 !important;
+    max-width: 122px;
+    white-space: nowrap;
+  }
+
+  .game-shell .topbar-identity .color-badge,
+  .game-shell .topbar-identity .spectator-badge {
+    flex: 0 0 auto;
+    min-height: 23px;
+    padding: 3px 6px;
+    font-size: .52rem;
+  }
+
+  .game-shell .topbar-identity strong {
+    min-width: 0;
+    max-width: 54px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: .58rem;
+  }
+
+  .game-shell .topbar-identity .connection {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+  }
+
+  /* 1. Cabeçalho; 2. fases compactas. */
+  .game-shell .mobile-round-slot {
+    display: block;
+    width: 100%;
+    margin: 8px auto 9px;
+  }
+
+  .game-shell .mobile-round-slot .round-panel {
+    position: static;
+    display: grid;
+    grid-template-columns: 62px minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    column-gap: 9px;
+    row-gap: 3px;
+    width: 100%;
+    padding: 8px 9px;
+    border-radius: 14px;
+  }
+
+  .game-shell .mobile-round-slot .round-panel > .eyebrow {
+    grid-column: 1;
+    grid-row: 1;
+    margin: 0;
+    font-size: .52rem;
+  }
+
+  .game-shell .mobile-round-slot .round-number {
+    grid-column: 1;
+    grid-row: 2;
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+    margin: 0;
+  }
+
+  .game-shell .mobile-round-slot .round-number strong {
+    font-size: 1.85rem;
+    line-height: .9;
+  }
+
+  .game-shell .mobile-round-slot .round-number span {
+    font-size: .55rem;
+  }
+
+  .game-shell .mobile-round-slot .round-panel h2 {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
+    margin: 0;
+    font-size: .8rem;
+    line-height: 1.15;
+  }
+
+  .game-shell .mobile-round-slot .round-panel ol {
+    grid-column: 2;
+    grid-row: 2;
+    display: grid;
+    gap: 1px;
+    margin: 0;
+    padding-left: 14px;
+    font-size: .55rem;
+    line-height: 1.2;
+  }
+
+  .game-shell .mobile-round-slot .phase-track {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 3px;
+    margin-top: 4px;
+  }
+
+  .game-shell .mobile-round-slot .phase-track span {
+    min-width: 0;
+    padding: 4px 2px;
+    border-left: 0;
+    border-bottom: 2px solid #33454e;
+    font-size: .48rem;
+    line-height: 1.1;
+    text-align: center;
+  }
+
+  /* 3. Adversários; 4. tanque; 5. confirmação e movimentos; 6. placar; 7. registros. */
+  .game-shell .opponents-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(154px, 1fr));
+    gap: 7px;
+    width: 100%;
+    margin: 0 auto 9px;
+    padding-bottom: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .game-shell .opponent-card {
+    padding: 8px;
+    border-radius: 14px;
+  }
+
+  .game-shell .game-stage {
+    display: flex !important;
+    flex-direction: column;
+    gap: 9px;
+    width: 100%;
+  }
+
+  .game-shell .game-stage > .my-tank-card {
+    order: 1;
+    width: 100%;
+  }
+
+  .game-shell .mobile-phase-confirm-slot {
+    order: 2;
+    display: block;
+    width: 100%;
+  }
+
+  .game-shell .mobile-phase-confirm-slot button {
+    width: 100%;
+    min-height: 38px;
+  }
+
+  .game-shell .game-stage > .right-rail,
+  .game-shell .game-stage > .left-rail {
+    display: contents !important;
+  }
+
+  .game-shell .left-rail > .round-panel { display: none !important; }
+
+  .game-shell .right-rail > .action-panel {
+    order: 3;
+    width: 100%;
+  }
+
+  .game-shell .left-rail > .population-panel {
+    order: 4;
+    width: 100%;
+  }
+
+  .game-shell .right-rail > .log-panel {
+    order: 5;
+    width: 100%;
+    max-height: 380px;
+  }
+
+  .game-shell .action-panel {
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .game-shell .action-panel .phase-kicker,
+  .game-shell .action-panel p,
+  .game-shell .movement-alert,
+  .game-shell .coin-rule-note {
+    font-size: .61rem;
+  }
+
+  .game-shell .action-panel h2,
+  .game-shell .movement-dashboard h2 {
+    font-size: .9rem;
+  }
+
+  .game-shell .movement-score { margin: 6px 0; }
+  .game-shell .movement-score strong { font-size: 2.45rem; }
+  .game-shell .movement-score span { font-size: 1rem; }
+  .game-shell .movement-dots { margin: 6px 0 9px; }
+  .game-shell .instruction { min-height: 0; margin: 8px 0; }
+  .game-shell .population-panel,
+  .game-shell .log-panel { padding: 10px; }
+}
+
+/* O arquivo mobile.html continua usando a mesma ordem mesmo em telas verticais um pouco maiores. */
+body[data-layout="mobile"] .mobile-phase-confirm-slot {
+  display: block;
+  width: 100%;
+}
