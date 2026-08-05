@@ -1,0 +1,20 @@
+{
+  "name": "carpas-online",
+  "version": "0.6.0",
+  "private": true,
+  "description": "Carpa Diem Online: multiplayer em tempo real com espectadores, reconexão, moedas, movimentos extras, persistência opcional no MongoDB Atlas e painel de registros.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3",
+    "mongodb": "^6.0.0"
+  }
+}
