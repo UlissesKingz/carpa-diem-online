@@ -677,3 +677,39 @@
     width: min(100%, 210px);
   }
 }
+
+/* Correção definitiva dos tanques do manual:
+   usa a proporção original da moldura e encaixa o grid exatamente na abertura. */
+.hero-tank-shell,
+.mini-tank-shell {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2378 / 1834;
+  padding: 0 !important;
+  overflow: visible;
+  background: url('/assets/tank-frame.png') center / 100% 100% no-repeat;
+}
+
+.hero-tank-shell > .manual-grid,
+.mini-tank-shell > .manual-grid {
+  position: absolute;
+  top: 13.08%;
+  right: 10.02%;
+  bottom: 13.08%;
+  left: 10.02%;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: auto;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-rows: repeat(5, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.hero-tank-shell > .manual-grid .manual-grid-cell,
+.mini-tank-shell > .manual-grid .manual-grid-cell {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
