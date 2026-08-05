@@ -80,7 +80,7 @@
         '<span class="example-arrow">→</span>',
         exampleBoard([
           null,
-          { type: 'red', rotation: 0, className: 'highlight' },
+          { type: 'red', rotation: 0, className: 'highlight moved-into' },
           { type: 'gray', rotation: 90 },
           { type: 'algae', rotation: 0 },
           { type: 'white', rotation: 90 },
@@ -101,7 +101,7 @@
         ], 3),
         '<span class="example-arrow">→</span>',
         `<div class="algae-step-flow">
-          <div class="algae-step"><span class="step-label">1</span>${pieceImage('algae', 0)}<small>alga move grátis</small></div>
+          <div class="algae-step"><span class="step-label">1</span>${pieceImage('algae', 0, 'step-piece moved-into')}<small>alga move grátis</small></div>
           <div class="algae-step"><span class="step-label">2</span>${pieceImage('white', 90)}<small>carpa obrigatória</small></div>
         </div>`
       ].join('');
@@ -113,17 +113,17 @@
           { type: 'yellow', rotation: 90 },
           null,
           { type: 'white', rotation: 90 },
-          { type: 'shoal', rotation: 0 },
           { type: 'gray', rotation: 90 },
+          { type: 'shoal', rotation: 0 },
           { type: 'red', rotation: 90 }
         ], 3),
         '<span class="example-arrow">→</span>',
         exampleBoard([
           { type: 'yellow', rotation: 90 },
-          { type: 'shoal', rotation: 0, className: 'highlight' },
+          { type: 'shoal', rotation: 0, className: 'highlight moved-into' },
           { type: 'white', rotation: 90 },
-          null,
           { type: 'gray', rotation: 90 },
+          null,
           { type: 'red', rotation: 90 }
         ], 3)
       ].join('');

@@ -144,12 +144,12 @@
 .setup-list { padding: 24px; }
 .setup-list h3 { margin: 0 0 18px; }
 .component-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.component-list li { display: flex; align-items: center; gap: 13px; min-height: 52px; padding: 7px 10px; border-radius: 12px; background: rgba(255,255,255,.025); }
-.component-art { width: 52px; height: 38px; display: grid; place-items: center; }
+.component-list li { display: flex; align-items: center; gap: 11px; min-height: 48px; padding: 6px 10px; border-radius: 12px; background: rgba(255,255,255,.025); }
+.component-art { width: 40px; height: 24px; display: grid; place-items: center; flex: 0 0 40px; }
 .component-art img { max-width: 100%; max-height: 100%; filter: drop-shadow(7px 8px 4px rgba(0,0,0,.5)); }
 .manual-note { margin-top: 18px; padding: 14px 16px; border: 1px solid rgba(241,201,92,.18); border-radius: 14px; color: #c6c0a0; background: rgba(241,201,92,.055); line-height: 1.55; }
-.setup-board-card { display: grid; align-content: center; padding: clamp(18px, 4vw, 34px); }
-.mini-tank-shell { padding: 9.5% 10.5%; border-radius: 24px; background: url('/assets/tank-frame.png') center / 100% 100% no-repeat; }
+.setup-board-card { display: grid; align-content: center; padding: clamp(14px, 3vw, 28px); }
+.mini-tank-shell { padding: 12.2% 10.4%; border-radius: 24px; background: url('/assets/tank-frame.png') center / 100% 100% no-repeat; }
 .manual-grid { display: grid; grid-template-columns: repeat(7, 1fr); aspect-ratio: 7/5; overflow: hidden; background: url('/assets/tank-water.png') center / cover; }
 .manual-grid-cell { position: relative; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.035); min-width: 0; }
 .manual-grid-cell img { width: 76%; height: 76%; object-fit: contain; filter: drop-shadow(5px 6px 3px rgba(0,0,0,.55)); }
@@ -349,7 +349,7 @@
   text-transform: uppercase;
 }
 .hero-tank-shell {
-  padding: 9% 10%;
+  padding: 13.2% 10.4%;
   border-radius: 28px;
   background: url('/assets/tank-frame.png') center / 100% 100% no-repeat;
 }
@@ -358,20 +358,20 @@
   border-radius: 16px;
 }
 .hero-grid .manual-grid-cell img {
-  width: 72%;
-  height: 72%;
+  width: 68%;
+  height: 68%;
 }
 .hero-grid .manual-grid-cell.carp img {
-  width: 54%;
-  height: 82%;
+  width: 50%;
+  height: 78%;
 }
 
 .component-list li {
-  grid-template-columns: 64px 1fr;
+  grid-template-columns: 46px 1fr;
 }
 .component-art {
-  width: 56px;
-  height: 44px;
+  width: 38px;
+  height: 24px;
 }
 .component-art img {
   max-width: 100%;
@@ -379,14 +379,14 @@
 }
 .component-art img.component-carp {
   transform: rotate(90deg);
-  max-width: 92%;
-  max-height: 92%;
+  max-width: 78%;
+  max-height: 78%;
 }
 .setup-board-card {
-  padding: 28px;
+  padding: 18px;
 }
 .mini-tank-shell {
-  padding: 9.2% 10.2%;
+  padding: 12.8% 10.4%;
 }
 .manual-grid {
   width: 100%;
@@ -452,6 +452,22 @@
 .example-board-cell.highlight img {
   filter: drop-shadow(0 0 0 rgba(0,0,0,0)) drop-shadow(0 0 12px rgba(102,214,202,.28)) drop-shadow(5px 6px 2px rgba(0,0,0,.55));
 }
+
+.example-board-cell.moved-into::before {
+  content: "↓";
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--warning);
+  font-size: 1.05rem;
+  font-weight: 950;
+  text-shadow: 0 1px 2px rgba(0,0,0,.55);
+}
+.example-board-cell.moved-into {
+  background: rgba(241,201,92,.07);
+}
+
 .example-arrow {
   font-size: 1.45rem;
 }
@@ -464,9 +480,21 @@
   justify-items: center;
 }
 .algae-step {
+  position: relative;
   display: grid;
   justify-items: center;
   gap: 4px;
+}
+.algae-step:first-child::before {
+  content: "↓";
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--warning);
+  font-size: 1.05rem;
+  font-weight: 950;
+  text-shadow: 0 1px 2px rgba(0,0,0,.55);
 }
 .algae-step img {
   width: 50px;
@@ -559,7 +587,7 @@
   }
   .hero-tank-shell,
   .mini-tank-shell {
-    padding: 9% 10%;
+    padding: 12.4% 10.2%;
   }
   .component-list {
     grid-template-columns: 1fr;
@@ -572,8 +600,8 @@
     font-size: .82rem;
   }
   .component-art {
-    width: 46px;
-    height: 34px;
+    width: 36px;
+    height: 24px;
   }
   .before-after,
   .obligation-example {
