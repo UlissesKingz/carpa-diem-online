@@ -1085,3 +1085,240 @@ body[data-layout="mobile"] .coin-rule-note { font-size: .7rem; }
 body[data-layout="mobile"] .movement-dashboard h2 { font-size: 1.2rem; }
 body[data-layout="mobile"] .movement-score strong { font-size: 3rem; }
 body[data-layout="mobile"] .movement-score span { font-size: 1.25rem; }
+
+/* Saída direta nas telas de espera, reconexão e partida pausada */
+.wait-card .wait-exit-game {
+  display: block;
+  width: min(260px, 100%);
+  margin: 22px auto 0;
+}
+
+/* Ajuste definitivo — sequência vertical da interface mobile */
+body[data-layout="mobile"] .topbar {
+  position: relative;
+  top: 0;
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+
+body[data-layout="mobile"] .topbar-controls {
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: max-content;
+  min-width: max-content;
+}
+
+body[data-layout="mobile"] .topbar-actions {
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  min-width: max-content;
+}
+
+body[data-layout="mobile"] .top-action {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 8px;
+  font-size: .62rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+body[data-layout="mobile"] .topbar-identity {
+  display: flex;
+  flex: 0 0 auto;
+  flex-flow: row nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+body[data-layout="mobile"] .topbar-identity strong {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: .67rem;
+}
+
+/* 2. Quadro das fases compacto, imediatamente abaixo da topbar. */
+body[data-layout="mobile"] .mobile-round-slot {
+  display: block;
+  width: 100%;
+  margin: 9px auto 10px;
+}
+
+body[data-layout="mobile"] .mobile-round-slot .round-panel {
+  position: static;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 14px;
+}
+
+body[data-layout="mobile"] .mobile-round-slot .round-number {
+  margin: 2px 0 7px;
+}
+
+body[data-layout="mobile"] .mobile-round-slot .round-number strong {
+  font-size: 2.25rem;
+  line-height: .9;
+}
+
+body[data-layout="mobile"] .mobile-round-slot .round-number span,
+body[data-layout="mobile"] .mobile-round-slot .round-panel h2 {
+  font-size: .82rem;
+}
+
+body[data-layout="mobile"] .mobile-round-slot .round-panel h2 {
+  margin-bottom: 6px;
+}
+
+body[data-layout="mobile"] .mobile-round-slot .round-panel ol {
+  gap: 3px;
+  padding-left: 17px;
+  font-size: .62rem;
+  line-height: 1.25;
+}
+
+body[data-layout="mobile"] .mobile-round-slot .phase-track {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 8px;
+}
+
+body[data-layout="mobile"] .mobile-round-slot .phase-track span {
+  min-width: 0;
+  padding: 5px 3px;
+  border-left: 0;
+  border-bottom: 2px solid #33454e;
+  font-size: .54rem;
+  line-height: 1.15;
+  text-align: center;
+}
+
+body[data-layout="mobile"] .mobile-round-slot .phase-track span.active {
+  border-bottom-color: var(--teal);
+}
+
+/* 3. Tabuleiros dos demais jogadores. */
+body[data-layout="mobile"] .opponents-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 9px;
+  width: 100%;
+  margin: 0 auto 10px;
+  padding-bottom: 5px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* 4–7. Ordem interna: tanque, movimentos, placar parcial e registros. */
+body[data-layout="mobile"] .game-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+body[data-layout="mobile"] .my-tank-card {
+  order: 1;
+  width: 100%;
+}
+
+body[data-layout="mobile"] .right-rail,
+body[data-layout="mobile"] .left-rail {
+  display: contents;
+}
+
+body[data-layout="mobile"] .left-rail .round-panel {
+  display: none;
+}
+
+body[data-layout="mobile"] .right-rail > .action-panel {
+  order: 2;
+  width: 100%;
+}
+
+body[data-layout="mobile"] .left-rail > .population-panel {
+  order: 3;
+  width: 100%;
+}
+
+body[data-layout="mobile"] .right-rail > .log-panel {
+  order: 4;
+  width: 100%;
+  max-height: 420px;
+}
+
+/* Textos um pouco menores nos quadros abaixo do tabuleiro. */
+body[data-layout="mobile"] .action-panel {
+  padding: 11px;
+}
+
+body[data-layout="mobile"] .action-panel .phase-kicker,
+body[data-layout="mobile"] .action-panel p,
+body[data-layout="mobile"] .movement-alert,
+body[data-layout="mobile"] .coin-rule-note {
+  font-size: .67rem;
+}
+
+body[data-layout="mobile"] .action-panel h2 {
+  font-size: 1rem;
+}
+
+body[data-layout="mobile"] .movement-dashboard h2 {
+  font-size: 1.08rem;
+}
+
+body[data-layout="mobile"] .population-panel,
+body[data-layout="mobile"] .log-panel {
+  padding: 12px;
+}
+
+/* Crédito autoral exibido na base de todas as telas. */
+body::after {
+  content: "Jogo criado por Ulisses Reis  © 2026 — Propriedade intelectual protegida. Reprodução, distribuição ou uso não autorizado são proibidos.";
+  position: fixed;
+  left: 50%;
+  bottom: 5px;
+  z-index: 8;
+  width: calc(100% - 24px);
+  max-width: 1200px;
+  transform: translateX(-50%);
+  color: rgba(249, 224, 193, .56);
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: .015em;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .82);
+  pointer-events: none;
+}
+
+body {
+  padding-bottom: 24px;
+}
+
+@media (max-width: 720px) {
+  body::after {
+    bottom: 3px;
+    width: calc(100% - 12px);
+    font-size: 7px;
+    line-height: 1.2;
+  }
+
+  body {
+    padding-bottom: 20px;
+  }
+}

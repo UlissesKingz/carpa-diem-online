@@ -680,10 +680,14 @@
     }).join('')}</section>`;
   }
 
+  function waitExitButtonHtml() {
+    return '<button type="button" class="danger-button wait-exit-game">Sair</button>';
+  }
+
   function serverConnectionUiHtml() {
     if ((serverConnected && !reconnectingToRoom) || (!state && !identity.roomCode)) return '';
     const reconnecting = serverConnected && reconnectingToRoom;
-    return `<div class="modal-backdrop server-wait-backdrop"><section class="modal-card wait-card"><img class="wait-fish-gif" src="${ASSETS.fishAnimation}" alt="" aria-hidden="true"><p class="eyebrow">${reconnecting ? 'Servidor restabelecido' : 'Conexão interrompida'}</p><h2>${reconnecting ? 'Reconectando à sala' : 'Aguardando o restabelecimento do servidor'}</h2><p>${reconnecting ? 'Recuperando seu lugar e o estado mais recente da partida.' : 'A partida permanecerá nesta tela e tentará reconectar automaticamente.'}</p></section></div>`;
+    return `<div class="modal-backdrop server-wait-backdrop"><section class="modal-card wait-card"><img class="wait-fish-gif" src="${ASSETS.fishAnimation}" alt="" aria-hidden="true"><p class="eyebrow">${reconnecting ? 'Servidor restabelecido' : 'Conexão interrompida'}</p><h2>${reconnecting ? 'Reconectando à sala' : 'Aguardando o restabelecimento do servidor'}</h2><p>${reconnecting ? 'Recuperando seu lugar e o estado mais recente da partida.' : 'A partida permanecerá nesta tela e tentará reconectar automaticamente.'}</p>${waitExitButtonHtml()}</section></div>`;
   }
 
   function disconnectedPlayersUiHtml() {
@@ -692,7 +696,7 @@
     if (!absent.length) return '';
     const first = absent[0];
     const extra = absent.length > 1 ? ` e mais ${absent.length - 1} jogador(es)` : '';
-    return `<div class="modal-backdrop player-wait-backdrop"><section class="modal-card wait-card"><img class="wait-fish-gif" src="${ASSETS.fishAnimation}" alt="" aria-hidden="true"><p class="eyebrow">Partida pausada</p><h2>Jogador ${escapeHtml(first.name)} saiu${extra}</h2><p>Aguardando retorno do jogador ${escapeHtml(first.name)}. A partida continua automaticamente quando todos estiverem presentes.</p>${absent.length > 1 ? `<div class="absent-list">${absent.map((player) => playerNameChip(player)).join('')}</div>` : ''}</section></div>`;
+    return `<div class="modal-backdrop player-wait-backdrop"><section class="modal-card wait-card"><img class="wait-fish-gif" src="${ASSETS.fishAnimation}" alt="" aria-hidden="true"><p class="eyebrow">Partida pausada</p><h2>Jogador ${escapeHtml(first.name)} saiu${extra}</h2><p>Aguardando retorno do jogador ${escapeHtml(first.name)}. A partida continua automaticamente quando todos estiverem presentes.</p>${absent.length > 1 ? `<div class="absent-list">${absent.map((player) => playerNameChip(player)).join('')}</div>` : ''}${waitExitButtonHtml()}</section></div>`;
   }
 
   function restartUiHtml() {
@@ -723,8 +727,34 @@
     return `<div class="modal-backdrop decision-backdrop"><section class="modal-card"><p class="eyebrow">Sair da partida</p><h2>Voltar para a tela inicial?</h2><p>Você poderá criar ou acessar outra sala. Para retornar a esta partida, informe novamente o mesmo nome e o código <strong>${state.code}</strong>.</p><div class="modal-actions"><button id="cancelExit" class="secondary-button">Continuar jogando</button><button id="confirmExit" class="danger-button">Sair</button></div></section></div>`;
   }
 
+  async function leaveWaitScreenToCleanLobby() {
+    const wasConnected = serverConnected;
+
+    // Apaga primeiro a identidade local para impedir uma reconexão automática
+    // caso o servidor retorne enquanto a saída estiver sendo processada.
+    identity = {};
+    localStorage.removeItem('carpasIdentity');
+    reconnectingToRoom = false;
+
+    if (wasConnected && state) {
+      await emit('leaveRoom', {}, { silent: true });
+    }
+
+    state = null;
+    entryRole = 'player';
+    notice = '';
+    movementError = '';
+    localRestartConfirm = false;
+    localExitConfirm = false;
+    clearEntryAfterExit = false;
+    render();
+  }
+
   function bindCommonGameActions() {
     bindExternalLinks();
+    document.querySelectorAll('.wait-exit-game').forEach((button) => {
+      button.addEventListener('click', leaveWaitScreenToCleanLobby);
+    });
     document.querySelectorAll('#restartGame, #finalRestartGame').forEach((button) => button.addEventListener('click', () => {
       if (state.restartVote) {
         notice = 'Já existe uma votação de reinício em andamento.';
