@@ -4,7 +4,7 @@ const ROWS = 5;
 const COLS = 7;
 const MIDDLE_ROW = 2;
 const CENTER = { row: 2, col: 3 };
-const MAX_ROUNDS = 10;
+const MAX_ROUNDS = 6;
 const MOVES_PER_ROUND = 12;
 const CIRCULATION_DURATION_MS = 5200;
 const EXTRA_MOVE_COST = 3;
@@ -199,7 +199,7 @@ function labelColor(color) {
 function phaseWaitLabel(phase) {
   return ({
     movement: 'Fase de movimentação',
-    development: 'Fase de reposição/troca'
+    development: 'Fase de Venda e reposição'
   })[phase] || 'fase atual';
 }
 
@@ -476,8 +476,9 @@ function movePiece(room, playerId, from) {
   if (player.mustMoveCarp && piece.type !== 'carp') throw new Error('Depois de uma alga, você deve mover uma carpa.');
 
   const triggersShoal = projectedShoalTrigger(board, from);
-  const currentCost = 1 + (triggersShoal ? 1 : 0);
   const createsCarpObligation = piece.type === 'algae';
+  const pieceMoveCost = createsCarpObligation ? 0 : 1;
+  const currentCost = pieceMoveCost + (triggersShoal ? 1 : 0);
   const futureRequired = createsCarpObligation ? 1 : 0;
   if (player.movesRemaining < currentCost + futureRequired) {
     throw new Error('Não há movimentos suficientes para completar essa ação e suas obrigações.');
@@ -488,7 +489,7 @@ function movePiece(room, playerId, from) {
   const orientation = orientPieceForMovement(piece, from, empty);
   board[empty.row][empty.col] = piece;
   board[from.row][from.col] = null;
-  player.movesRemaining -= 1;
+  player.movesRemaining -= pieceMoveCost;
 
   if (fulfillsCarpObligation) player.mustMoveCarp = false;
   if (createsCarpObligation) player.mustMoveCarp = true;
@@ -529,7 +530,11 @@ function movePiece(room, playerId, from) {
     shoal: shoalAnimation
   });
   const moveLimit = MOVES_PER_ROUND + player.extraMovesPurchased;
-  addLog(room, `realizou o movimento ${moveLimit - player.movesRemaining}/${moveLimit}.`, playerId);
+  if (createsCarpObligation && !shoalMoved) {
+    addLog(room, 'moveu uma alga sem gastar movimento; agora deve mover uma carpa.', playerId);
+  } else {
+    addLog(room, `realizou o movimento ${moveLimit - player.movesRemaining}/${moveLimit}.`, playerId);
+  }
   return { correction: false, shoalMoved };
 }
 
@@ -625,7 +630,7 @@ function beginDevelopment(room) {
     };
   }
   setAction(room, { type: 'phaseChange', phase: 'development' });
-  addLog(room, 'Começou a fase da reposição/troca.');
+  addLog(room, 'Começou a fase de Venda e reposição.');
   completeZeroDevelopments(room);
 }
 
@@ -653,11 +658,11 @@ function completeZeroDevelopments(room) {
 
 function chooseDevelopmentColor(room, playerId, color) {
   assertPlayersPresent(room);
-  if (room.phase !== 'development') throw new Error('Não é a fase da reposição/troca.');
+  if (room.phase !== 'development') throw new Error('Não é a fase de Venda e reposição.');
   const player = room.players[playerId];
   const development = player?.development;
   if (!development) throw new Error('Reposição indisponível.');
-  if (development.done) throw new Error(waitingForPlayersMessage(room, playerId, 'development') || 'Você já concluiu a Fase de reposição/troca.');
+  if (development.done) throw new Error(waitingForPlayersMessage(room, playerId, 'development') || 'Você já concluiu a Fase de Venda e reposição.');
   refreshDevelopmentOptions(player);
   if (!development.eligibleColors.includes(color)) throw new Error('Essa cor não está entre as menos numerosas neste momento.');
   development.chosenColor = color;
@@ -667,11 +672,11 @@ function chooseDevelopmentColor(room, playerId, color) {
 
 function replaceFish(room, playerId, position) {
   assertPlayersPresent(room);
-  if (room.phase !== 'development') throw new Error('Não é a fase da reposição/troca.');
+  if (room.phase !== 'development') throw new Error('Não é a fase de Venda e reposição.');
   const player = room.players[playerId];
   const development = player?.development;
   if (!development) throw new Error('Reposição indisponível.');
-  if (development.done) throw new Error(waitingForPlayersMessage(room, playerId, 'development') || 'Você já concluiu a Fase de reposição/troca.');
+  if (development.done) throw new Error(waitingForPlayersMessage(room, playerId, 'development') || 'Você já concluiu a Fase de Venda e reposição.');
   refreshDevelopmentOptions(player);
   if (!development.chosenColor) throw new Error('Escolha primeiro uma das cores menos numerosas.');
   if (!isInside(position.row, position.col)) throw new Error('Posição inválida.');

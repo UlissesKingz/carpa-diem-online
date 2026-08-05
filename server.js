@@ -37,6 +37,67 @@ app.get('/health', (_req, res) => res.json({ ok: true, storage: storage.status()
 
 const rooms = new Map();
 const circulationTimers = new Map();
+const emptyRoomTimers = new Map();
+const EMPTY_ROOM_CLOSE_MS = 10 * 60 * 1000;
+let heartbeatTimer = null;
+let shuttingDown = false;
+
+function fireAndForget(promise, label) {
+  Promise.resolve(promise).catch((error) => console.error(`${label}:`, error.message));
+}
+
+function auditRoomEvent(room, event) {
+  fireAndForget(storage.recordRoomEvent(room, event), `[MongoDB] Falha ao registrar evento da sala ${room.code}`);
+}
+
+function markRoomEmpty(room, message, final = false) {
+  const audit = storage.ensureAudit(room);
+  const now = Date.now();
+  if (final) {
+    audit.isEmpty = true;
+    audit.emptySince ||= now;
+    audit.finalClosedAt = now;
+    auditRoomEvent(room, {
+      at: now,
+      type: 'room_final_closed',
+      message: message || `Sala ${room.code} encerrada sem participantes conectados.`,
+      reason: 'no_connected_participants'
+    });
+    return;
+  }
+  if (audit.isEmpty) return;
+  audit.isEmpty = true;
+  audit.emptySince = now;
+  auditRoomEvent(room, {
+    at: now,
+    type: 'room_closed',
+    message: message || `Sala ${room.code} ficou sem participantes conectados.`,
+    reason: 'no_connected_participants'
+  });
+}
+
+function reopenRoomIfNeeded(room, memberName) {
+  cancelEmptyRoomTimer(room.code);
+  const audit = storage.ensureAudit(room);
+  if (!audit.isEmpty) return;
+  const now = Date.now();
+  audit.isEmpty = false;
+  audit.emptySince = null;
+  auditRoomEvent(room, {
+    at: now,
+    type: 'room_reopened',
+    message: `Sala ${room.code} reaberta após o retorno de ${memberName}.`
+  });
+}
+
+function memberAuditData(member, role) {
+  return {
+    memberId: member?.id || null,
+    name: member?.name || null,
+    role,
+    color: role === 'player' ? member?.color || null : null
+  };
+}
 
 function adminAuth(req, res, next) {
   const password = process.env.ADMIN_PASSWORD;
@@ -110,13 +171,30 @@ app.get('/dev-salas', adminAuth, (_req, res) => {
 
 app.get('/api/admin/dashboard', adminAuth, async (req, res) => {
   try {
-    const matches = await storage.listMatches(req.query.limit || 100);
+    const limit = req.query.limit || 300;
+    const [roomSessions, serverEvents, matches] = await Promise.all([
+      storage.listRoomSessions(limit),
+      storage.listServerEvents(limit),
+      storage.listMatches(50)
+    ]);
     res.json({
       ok: true,
       storage: storage.status(),
       activeRooms: [...rooms.values()].map(roomSummary).sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0)),
+      roomSessions,
+      serverEvents,
       matches
     });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get('/api/admin/room-sessions/:sessionId', adminAuth, async (req, res) => {
+  try {
+    const session = await storage.getRoomSession(req.params.sessionId);
+    if (!session) return res.status(404).json({ ok: false, error: 'Registro da sala não encontrado.' });
+    res.json({ ok: true, session });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
@@ -170,6 +248,36 @@ function cancelCirculationTimer(code) {
   const timer = circulationTimers.get(code);
   if (timer) clearTimeout(timer);
   circulationTimers.delete(code);
+}
+
+function cancelEmptyRoomTimer(code) {
+  const timer = emptyRoomTimers.get(code);
+  if (timer) clearTimeout(timer);
+  emptyRoomTimers.delete(code);
+}
+
+function scheduleEmptyRoomClosure(room) {
+  if (!room || storage.connectedCount(room) > 0) {
+    if (room) cancelEmptyRoomTimer(room.code);
+    return;
+  }
+  if (emptyRoomTimers.has(room.code)) return;
+
+  const audit = storage.ensureAudit(room);
+  const emptySince = Number(audit.emptySince || Date.now());
+  const delay = Math.max(0, EMPTY_ROOM_CLOSE_MS - (Date.now() - emptySince));
+  const timer = setTimeout(() => {
+    emptyRoomTimers.delete(room.code);
+    const current = rooms.get(room.code);
+    if (!current || storage.connectedCount(current) > 0) return;
+
+    cancelCirculationTimer(current.code);
+    markRoomEmpty(current, `Sala ${current.code} encerrada após 10 minutos sem participantes conectados.`, true);
+    rooms.delete(current.code);
+    fireAndForget(storage.deleteRoom(current.code), '[MongoDB] Falha ao remover sala ativa');
+  }, delay);
+  timer.unref?.();
+  emptyRoomTimers.set(room.code, timer);
 }
 
 function scheduleCirculation(room) {
@@ -238,7 +346,9 @@ io.on('connection', (socket) => {
     const room = uniqueRoom({ hostName: payload.name, color: payload.color, socketId: socket.id });
     rooms.set(room.code, room);
     const player = room.players[room.hostId];
+    storage.ensureAudit(room);
     attachSocketToRoom(socket, room, player, 'player');
+    fireAndForget(storage.openRoomSession(room, player), `[MongoDB] Falha ao abrir registro da sala ${room.code}`);
     emitRoom(room);
     return {
       roomCode: room.code,
@@ -267,6 +377,7 @@ io.on('connection', (socket) => {
       if (!player) throw new Error('A partida já começou. Para voltar, use o mesmo nome e o código da sala; ou entre como espectador.');
     }
 
+    const returningPlayer = Boolean(player);
     if (player) {
       player.socketId = socket.id;
       player.connected = true;
@@ -277,6 +388,13 @@ io.on('connection', (socket) => {
     }
 
     attachSocketToRoom(socket, room, player, 'player');
+    auditRoomEvent(room, {
+      at: Date.now(),
+      type: returningPlayer ? 'participant_returned' : 'participant_joined',
+      message: returningPlayer ? `${player.name} retornou à sala como jogador.` : `${player.name} entrou na sala como jogador.`,
+      ...memberAuditData(player, 'player')
+    });
+    reopenRoomIfNeeded(room, player.name);
     emitRoom(room);
     return {
       roomCode: room.code,
@@ -297,6 +415,7 @@ io.on('connection', (socket) => {
       spectator = Object.values(room.spectators).find((item) => item.token === payload.spectatorToken) || null;
     }
 
+    const returningSpectator = Boolean(spectator);
     if (spectator) {
       spectator.socketId = socket.id;
       spectator.connected = true;
@@ -306,6 +425,13 @@ io.on('connection', (socket) => {
     }
 
     attachSocketToRoom(socket, room, spectator, 'spectator');
+    auditRoomEvent(room, {
+      at: Date.now(),
+      type: returningSpectator ? 'participant_returned' : 'participant_joined',
+      message: returningSpectator ? `${spectator.name} retornou à sala como espectador.` : `${spectator.name} entrou na sala como espectador.`,
+      ...memberAuditData(spectator, 'spectator')
+    });
+    reopenRoomIfNeeded(room, spectator.name);
     emitRoom(room);
     return {
       roomCode: room.code,
@@ -319,17 +445,26 @@ io.on('connection', (socket) => {
     const room = roomForSocket(socket);
     const role = socket.data.memberRole;
     const memberId = socket.data.memberId;
+    const member = role === 'spectator' ? room.spectators[memberId] : room.players[memberId];
+    const memberData = memberAuditData(member, role);
     const result = removeMember(room, memberId, role);
     clearSocketRoom(socket);
 
-    if (result.roomEmpty) {
-      cancelCirculationTimer(room.code);
-      rooms.delete(room.code);
-      storage.deleteRoom(room.code).catch((error) => console.error('[MongoDB] Falha ao remover sala:', error.message));
-    } else {
-      if (result.retained) pauseCirculation(room);
-      emitRoom(room);
+    auditRoomEvent(room, {
+      at: Date.now(),
+      type: 'participant_left',
+      message: `${memberData.name || 'Participante'} saiu voluntariamente da sala como ${role === 'spectator' ? 'espectador' : 'jogador'}.`,
+      reason: 'voluntary_exit',
+      ...memberData
+    });
+
+    const noConnectedParticipants = storage.connectedCount(room) === 0;
+    if (result.retained) pauseCirculation(room);
+    if (noConnectedParticipants) {
+      markRoomEmpty(room, `Sala ${room.code} ficou sem participantes conectados. Será encerrada em 10 minutos se ninguém retornar.`);
+      scheduleEmptyRoomClosure(room);
     }
+    emitRoom(room);
     return {};
   }));
 
@@ -406,7 +541,7 @@ io.on('connection', (socket) => {
     return {};
   }));
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', (reason) => {
     const code = socket.data.roomCode;
     const memberId = socket.data.memberId;
     const role = socket.data.memberRole;
@@ -414,8 +549,9 @@ io.on('connection', (socket) => {
     if (!room || !memberId) return;
 
     const member = role === 'spectator' ? room.spectators[memberId] : room.players[memberId];
-    if (!member) return;
+    if (!member || !member.connected) return;
     member.connected = false;
+    member.socketId = null;
     if (role === 'player') pauseCirculation(room);
     room.logs.push({
       at: Date.now(),
@@ -423,6 +559,17 @@ io.on('connection', (socket) => {
       actorId: role === 'player' ? member.id : null,
       actorRole: role || 'player'
     });
+    auditRoomEvent(room, {
+      at: Date.now(),
+      type: 'participant_disconnected',
+      message: `${member.name} perdeu a conexão como ${role === 'spectator' ? 'espectador' : 'jogador'}.`,
+      reason: reason || 'socket_disconnect',
+      ...memberAuditData(member, role || 'player')
+    });
+    if (storage.connectedCount(room) === 0) {
+      markRoomEmpty(room, `Sala ${room.code} ficou sem participantes conectados após uma queda de conexão. Será encerrada em 10 minutos se ninguém retornar.`);
+      scheduleEmptyRoomClosure(room);
+    }
     emitRoom(room);
   });
 });
@@ -431,8 +578,26 @@ async function bootstrap() {
   try {
     const storageResult = await storage.initialize();
     if (storageResult.enabled) {
+      await storage.registerServerStart();
+      heartbeatTimer = setInterval(() => {
+        fireAndForget(storage.heartbeatServer(), '[MongoDB] Falha no heartbeat do servidor');
+      }, storage.DEFAULT_HEARTBEAT_MS);
+      heartbeatTimer.unref?.();
+
       const restoredRooms = await storage.loadRooms();
-      for (const room of restoredRooms) rooms.set(room.code, room);
+      for (const room of restoredRooms) {
+        storage.ensureAudit(room);
+        room.audit.isEmpty = true;
+        room.audit.emptySince ||= Date.now();
+        rooms.set(room.code, room);
+        auditRoomEvent(room, {
+          at: Date.now(),
+          type: 'room_closed',
+          message: `Sala ${room.code} recuperada após reinício do servidor e aguardando retorno dos participantes por até 10 minutos.`,
+          reason: 'server_restart'
+        });
+        scheduleEmptyRoomClosure(room);
+      }
       console.log(`[MongoDB] Conectado ao banco ${storageResult.dbName}. ${restoredRooms.length} sala(s) recuperada(s).`);
     } else {
       console.log('[MongoDB] Modo memória:', storageResult.reason);
@@ -448,9 +613,19 @@ async function bootstrap() {
   });
 }
 
-process.on('SIGTERM', async () => {
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  for (const timer of emptyRoomTimers.values()) clearTimeout(timer);
+  emptyRoomTimers.clear();
+  await storage.registerServerStop(signal).catch(() => {});
   await storage.close().catch(() => {});
   server.close(() => process.exit(0));
-});
+  setTimeout(() => process.exit(0), 3000).unref?.();
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 bootstrap();

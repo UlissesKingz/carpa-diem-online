@@ -36,7 +36,7 @@ test('cria a preparação equilibrada com centro vazio', () => {
   assert.equal(player.board.flat().filter((piece) => piece?.type === 'algae').length, 5);
   assert.equal(player.board.flat().filter((piece) => piece?.type === 'shoal').length, 1);
   assert.equal(publicRoom(room).constants.movesPerRound, 12);
-  assert.equal(publicRoom(room).constants.maxRounds, 10);
+  assert.equal(publicRoom(room).constants.maxRounds, 6);
 });
 
 test('espectador entra sem ocupar cor ou vaga de jogador', () => {
@@ -139,6 +139,32 @@ test('carpa gira a cabeça para a direção do movimento', () => {
   assert.equal(player.movesRemaining, 11);
 });
 
+test('mover uma alga não gasta movimento e obriga mover uma carpa', () => {
+  const room = makeTwoPlayerRoom();
+  startGame(room, room.hostId);
+  const player = room.players[room.hostId];
+  const board = player.board;
+  const target = { row: 2, col: 2 };
+
+  let algaePosition = null;
+  let shoalPosition = null;
+  for (let row = 0; row < 5; row += 1) {
+    for (let col = 0; col < 7; col += 1) {
+      if (!algaePosition && board[row][col]?.type === 'algae') algaePosition = { row, col };
+      if (board[row][col]?.type === 'shoal') shoalPosition = { row, col };
+    }
+  }
+  [board[algaePosition.row][algaePosition.col], board[target.row][target.col]] = [board[target.row][target.col], board[algaePosition.row][algaePosition.col]];
+  if (Math.abs(shoalPosition.row - target.row) + Math.abs(shoalPosition.col - target.col) === 1) {
+    const safe = { row: 0, col: 0 };
+    [board[shoalPosition.row][shoalPosition.col], board[safe.row][safe.col]] = [board[safe.row][safe.col], board[shoalPosition.row][shoalPosition.col]];
+  }
+
+  movePiece(room, room.hostId, target);
+  assert.equal(player.movesRemaining, 12);
+  assert.equal(player.mustMoveCarp, true);
+  assert.match(room.logs.at(-1).text, /sem gastar movimento/);
+});
 
 test('desfazer restaura o tabuleiro e o contador de movimentos', () => {
   const room = makeTwoPlayerRoom();

@@ -9,7 +9,7 @@
   const PHASE_LABELS = {
     lobby: 'Sala de espera',
     movement: 'Fase da movimentação',
-    development: 'Fase da reposição/troca',
+    development: 'Fase de Venda e reposição',
     circulation: 'Fase da Correnteza',
     finished: 'Fase do resultado final'
   };
@@ -21,7 +21,8 @@
     algae: '/assets/algae.png',
     shoal: '/assets/shoal.png',
     coin: '/assets/coin.png',
-    moneyBag: '/assets/money-bag.png'
+    moneyBag: '/assets/money-bag.png',
+    fishAnimation: '/assets/fish-animation.gif'
   };
 
   const SOUND_URLS = {
@@ -339,6 +340,10 @@
     return `<button class="top-action external-link" data-link-key="${key}"><span aria-hidden="true">${icon}</span>${label}</button>`;
   }
 
+  function initialExternalActionsHtml() {
+    return `<nav class="initial-external-actions" aria-label="Links do jogo">${externalButton('Manual', 'manual', '▤')}${externalButton('Discord', 'discord', '◉')}</nav>`;
+  }
+
   function bindExternalLinks() {
     document.querySelectorAll('.external-link').forEach((button) => {
       button.addEventListener('click', () => {
@@ -384,7 +389,7 @@
     if (state.phase === 'movement') {
       return [
         `Faça ${state.constants.movesPerRound} movimentos usando o espaço vazio.`,
-        'Depois de mover uma alga, mova uma carpa.',
+        'Mover uma alga não gasta movimento; depois dela, mova uma carpa.',
         'O cardume invade o vazio adjacente e gasta 1 movimento.',
         'Se o vazio terminar na linha central, preencha-o com um movimento extra.',
         `A cada ${state.constants.extraMoveCost} moedas, compre 1 movimento extra.`
@@ -404,7 +409,7 @@
         'As 7 peças da linha central saem pela esquerda.',
         'A sequência das peças é preservada.',
         'Cada linha entra pela direita no tanque seguinte.',
-        'A fase da reposição/troca começa depois da Correnteza.'
+        'A fase de Venda e reposição começa depois da Correnteza.'
       ];
     }
     return ['Conte todas as carpas de cada cor nos tanques.', 'A maior pontuação vence.', 'Em empate de carpas, vence quem tiver mais moedas.'];
@@ -421,7 +426,7 @@
         <div class="phase-track" aria-label="Ordem das fases">
           <span class="${state.phase === 'movement' ? 'active' : ''}">Movimentação</span>
           <span class="${state.phase === 'circulation' ? 'active' : ''}">Correnteza</span>
-          <span class="${state.phase === 'development' ? 'active' : ''}">Reposição/troca</span>
+          <span class="${state.phase === 'development' ? 'active' : ''}">Venda e reposição</span>
         </div>
       </aside>`;
   }
@@ -437,6 +442,7 @@
       <main class="entry-shell">
         <div class="initial-stack">
           ${logoHtml('initial-logo')}
+          ${initialExternalActionsHtml()}
           <section class="entry-card">
           <p class="eyebrow">Carpas Online · MVP 6</p>
           <h1>Entre no ecossistema</h1>
@@ -457,6 +463,8 @@
         </div>
         ${serverConnectionUiHtml()}
       </main>`;
+
+    bindExternalLinks();
 
     document.querySelectorAll('.role-tab').forEach((button) => {
       button.addEventListener('click', () => {
@@ -501,6 +509,7 @@
       <main class="lobby-shell">
         <div class="initial-stack lobby-initial-stack">
           ${logoHtml('initial-logo lobby-logo')}
+          ${initialExternalActionsHtml()}
           <section class="lobby-card">
           <header>
             <button id="backToEntry" class="back-button">← Voltar</button>
@@ -518,6 +527,8 @@
         </div>
         ${serverConnectionUiHtml()}
       </main>`;
+
+    bindExternalLinks();
 
     document.querySelector('#backToEntry').addEventListener('click', async () => {
       const response = await emit('leaveRoom');
@@ -570,7 +581,7 @@
       .map((id) => state.players[id]?.name)
       .filter(Boolean);
     if (!pending.length) return '';
-    const phase = state.phase === 'movement' ? 'Fase de movimentação' : 'Fase de reposição/troca';
+    const phase = state.phase === 'movement' ? 'Fase de movimentação' : 'Fase de Venda e reposição';
     if (pending.length === 1) return `Aguarde o jogador ${pending[0]} terminar a ${phase}.`;
     return `Aguarde os jogadores ${pending.slice(0, -1).join(', ')} e ${pending.at(-1)} terminarem a ${phase}.`;
   }
@@ -626,17 +637,17 @@
 
   function developmentPanel(current) {
     const dev = current.development;
-    if (!dev) return '<section class="action-panel"><h2>Preparando a reposição...</h2></section>';
+    if (!dev) return '<section class="action-panel"><h2>Preparando a venda e reposição...</h2></section>';
     if (dev.done) {
       const waitMessage = waitingForOtherPlayersMessage();
-      return `<section class="action-panel"><p class="phase-kicker">Fase da reposição/troca</p><h2>Reposição concluída</h2><div class="replacement-score"><strong>${dev.replaced}</strong><span>/ ${dev.capacity}</span></div><p>Você recebeu ${dev.replaced} moeda(s) nesta fase. ${waitMessage || 'Preparando a próxima rodada.'}</p>${waitMessage ? '<button class="secondary-button try-next-phase" data-wait-phase="development">Continuar para a próxima fase</button>' : ''}</section>`;
+      return `<section class="action-panel"><p class="phase-kicker">Fase de Venda e reposição</p><h2>Venda e reposição concluída</h2><div class="replacement-score"><strong>${dev.replaced}</strong><span>/ ${dev.capacity}</span></div><p>Você recebeu ${dev.replaced} moeda(s) nesta fase. ${waitMessage || 'Preparando a próxima rodada.'}</p>${waitMessage ? '<button class="secondary-button try-next-phase" data-wait-phase="development">Continuar para a próxima fase</button>' : ''}</section>`;
     }
-    if (dev.capacity === 0) return `<section class="action-panel"><p class="phase-kicker">Fase da reposição/troca</p><h2>Nenhuma troca</h2><p>Não há carpas ${COLOR_LABELS[current.color].toLowerCase()} na linha central.</p></section>`;
+    if (dev.capacity === 0) return `<section class="action-panel"><p class="phase-kicker">Fase de Venda e reposição</p><h2>Nenhuma venda ou reposição</h2><p>Não há carpas ${COLOR_LABELS[current.color].toLowerCase()} na linha central.</p></section>`;
     if (!dev.chosenColor) {
       const title = dev.replaced > 0 ? 'Escolha a próxima menor cor' : 'Escolha a menor cor';
-      return `<section class="action-panel"><p class="phase-kicker">Fase da reposição/troca</p><h2>${title}</h2><div class="replacement-score"><strong>${dev.replaced}</strong><span>/ ${dev.capacity}</span></div><p>Continue até completar todas as reposições conquistadas.</p><div class="choice-row">${dev.eligibleColors.map((color) => `<button class="color-target secondary-button target-${color}" data-color="${color}">${COLOR_LABELS[color]}</button>`).join('')}</div></section>`;
+      return `<section class="action-panel"><p class="phase-kicker">Fase de Venda e reposição</p><h2>${title}</h2><div class="replacement-score"><strong>${dev.replaced}</strong><span>/ ${dev.capacity}</span></div><p>Continue até completar todas as reposições conquistadas.</p><div class="choice-row">${dev.eligibleColors.map((color) => `<button class="color-target secondary-button target-${color}" data-color="${color}">${COLOR_LABELS[color]}</button>`).join('')}</div></section>`;
     }
-    return `<section class="action-panel"><p class="phase-kicker">Fase da reposição/troca</p><h2>Troque as carpas ${COLOR_LABELS[dev.chosenColor].toLowerCase()}</h2><div class="replacement-score"><strong>${dev.replaced}</strong><span>/ ${dev.capacity}</span></div><p>Clique nas peças destacadas. Cada carpa retirada rende <strong>1 moeda</strong>.</p></section>`;
+    return `<section class="action-panel"><p class="phase-kicker">Fase de Venda e reposição</p><h2>Troque as carpas ${COLOR_LABELS[dev.chosenColor].toLowerCase()}</h2><div class="replacement-score"><strong>${dev.replaced}</strong><span>/ ${dev.capacity}</span></div><p>Clique nas peças destacadas. Cada carpa retirada rende <strong>1 moeda</strong>.</p></section>`;
   }
 
 
@@ -672,7 +683,7 @@
   function serverConnectionUiHtml() {
     if ((serverConnected && !reconnectingToRoom) || (!state && !identity.roomCode)) return '';
     const reconnecting = serverConnected && reconnectingToRoom;
-    return `<div class="modal-backdrop server-wait-backdrop"><section class="modal-card wait-card"><span class="wait-spinner" aria-hidden="true"></span><p class="eyebrow">${reconnecting ? 'Servidor restabelecido' : 'Conexão interrompida'}</p><h2>${reconnecting ? 'Reconectando à sala' : 'Aguardando o restabelecimento do servidor'}</h2><p>${reconnecting ? 'Recuperando seu lugar e o estado mais recente da partida.' : 'A partida permanecerá nesta tela e tentará reconectar automaticamente.'}</p></section></div>`;
+    return `<div class="modal-backdrop server-wait-backdrop"><section class="modal-card wait-card"><img class="wait-fish-gif" src="${ASSETS.fishAnimation}" alt="" aria-hidden="true"><p class="eyebrow">${reconnecting ? 'Servidor restabelecido' : 'Conexão interrompida'}</p><h2>${reconnecting ? 'Reconectando à sala' : 'Aguardando o restabelecimento do servidor'}</h2><p>${reconnecting ? 'Recuperando seu lugar e o estado mais recente da partida.' : 'A partida permanecerá nesta tela e tentará reconectar automaticamente.'}</p></section></div>`;
   }
 
   function disconnectedPlayersUiHtml() {
@@ -681,7 +692,7 @@
     if (!absent.length) return '';
     const first = absent[0];
     const extra = absent.length > 1 ? ` e mais ${absent.length - 1} jogador(es)` : '';
-    return `<div class="modal-backdrop player-wait-backdrop"><section class="modal-card wait-card"><span class="offline-fish" aria-hidden="true">◌</span><p class="eyebrow">Partida pausada</p><h2>Jogador ${escapeHtml(first.name)} saiu${extra}</h2><p>Aguardando retorno do jogador ${escapeHtml(first.name)}. A partida continua automaticamente quando todos estiverem presentes.</p>${absent.length > 1 ? `<div class="absent-list">${absent.map((player) => playerNameChip(player)).join('')}</div>` : ''}</section></div>`;
+    return `<div class="modal-backdrop player-wait-backdrop"><section class="modal-card wait-card"><img class="wait-fish-gif" src="${ASSETS.fishAnimation}" alt="" aria-hidden="true"><p class="eyebrow">Partida pausada</p><h2>Jogador ${escapeHtml(first.name)} saiu${extra}</h2><p>Aguardando retorno do jogador ${escapeHtml(first.name)}. A partida continua automaticamente quando todos estiverem presentes.</p>${absent.length > 1 ? `<div class="absent-list">${absent.map((player) => playerNameChip(player)).join('')}</div>` : ''}</section></div>`;
   }
 
   function restartUiHtml() {
@@ -786,6 +797,7 @@
         ${serverConnectionUiHtml()}
         ${disconnectedPlayersUiHtml()}
         ${scorePanel()}
+        <div class="mobile-round-slot">${roundPanelHtml()}</div>
         <section class="opponents-strip">${opponentsHtml()}</section>
         <main class="game-stage">
           <aside class="left-rail">${roundPanelHtml()}${populationScorePanelHtml()}</aside>
@@ -858,6 +870,7 @@
         ${serverConnectionUiHtml()}
         ${disconnectedPlayersUiHtml()}
         ${scorePanel()}
+        <div class="mobile-round-slot">${roundPanelHtml()}</div>
         <main class="spectator-stage">
           <aside class="left-rail">${roundPanelHtml()}${populationScorePanelHtml()}</aside>
           <section class="spectator-board-grid">${boards}</section>
@@ -873,6 +886,7 @@
   }
 
   function render() {
+    document.body.classList.toggle('initial-lobby-scene', !state || state.status === 'lobby');
     animateCurrentAction = Boolean(state?.lastAction && state.lastAction.id !== lastAnimatedActionId);
     if (!state) return lobbyEntry();
     if (state.status === 'lobby') return lobbyRoom();

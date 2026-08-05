@@ -23,6 +23,8 @@ html { min-height: 100%; background: var(--bg); }
 body {
   min-height: 100vh;
   margin: 0;
+  position: relative;
+  isolation: isolate;
   color: var(--text);
   background:
     radial-gradient(circle at 20% -10%, rgba(40, 126, 126, .2), transparent 34%),
@@ -30,23 +32,34 @@ body {
     linear-gradient(145deg, #070b10 0%, #0b1219 48%, #071015 100%);
 }
 
+/* O GIF fica sob o PNG de background somente nas telas inicial e de lobby. */
 body::before {
   content: "";
   position: fixed;
-  inset: 0;
-
-  background-image: url("https://i.imgur.com/pMzFx5M.png");
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: cover;
-
+  left: 50%;
+  top: 50%;
+  width: 80vw;
+  height: 80vh;
+  background: url('/assets/fish-animation.gif') center / contain no-repeat;
+  opacity: 0;
+  transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 0;
+}
+body.initial-lobby-scene::before { opacity: .5; }
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: url("https://i.imgur.com/pMzFx5M.png") center / cover no-repeat;
+  pointer-events: none;
+  z-index: 1;
 }
 
 body > * {
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 button, input { font: inherit; }
@@ -656,6 +669,8 @@ body[data-layout="mobile"] .movement-score strong { font-size: 3.6rem; }
   gap: 18px;
   width: min(760px, 100%);
 }
+.initial-external-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.initial-external-actions .top-action { min-width: 122px; justify-content: center; backdrop-filter: blur(12px); }
 .initial-logo {
   display: block;
   width: min(520px, 88vw);
@@ -782,7 +797,9 @@ body[data-layout="mobile"] .left-rail { width: 100%; position: static; }
 body[data-layout="mobile"] .population-panel { width: 100%; }
 
 @media (max-width: 650px) {
-  .initial-logo { max-height: 105px; }
+  .initial-external-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.initial-external-actions .top-action { min-width: 122px; justify-content: center; backdrop-filter: blur(12px); }
+.initial-logo { max-height: 105px; }
   .topbar-controls { width: 100%; }
   .topbar-actions { display: grid; grid-template-columns: repeat(2, 1fr); width: 100%; }
   .topbar-identity { justify-content: center; }
@@ -917,27 +934,14 @@ body[data-layout="mobile"] .population-panel { width: 100%; }
 .player-wait-backdrop { z-index: 150; background: rgba(2, 5, 8, .74); }
 .wait-card { text-align: center; }
 .wait-card h2 { margin-bottom: 12px; }
-.wait-spinner {
+.wait-fish-gif {
   display: block;
-  width: 48px;
-  height: 48px;
+  width: min(290px, 78%);
+  max-height: 145px;
   margin: 0 auto 18px;
-  border: 4px solid rgba(249, 224, 193, .14);
-  border-top-color: var(--teal);
-  border-radius: 50%;
-  animation: waitSpin .9s linear infinite;
-}
-.offline-fish {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  margin: 0 auto 16px;
-  border: 2px solid rgba(239, 107, 104, .38);
-  border-radius: 50%;
-  color: #ff9d99;
-  font-size: 2rem;
-  animation: offlinePulse 1.35s ease-in-out infinite;
+  object-fit: contain;
+  opacity: .9;
+  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, .46));
 }
 .absent-list { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 
@@ -991,3 +995,93 @@ body[data-layout="mobile"] .population-panel { width: 100%; }
   .final-result-actions { grid-template-columns: 1fr; }
   .result-logo { width: min(280px, 82%); max-height: 100px; }
 }
+
+
+/* Ajustes de apresentação: Venda e reposição, fundo animado e ordem mobile. */
+.mobile-round-slot { display: none; }
+
+body[data-layout="mobile"].initial-lobby-scene::before {
+  width: 80vh;
+  height: 80vw;
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+body[data-layout="mobile"] .mobile-round-slot {
+  display: block;
+  width: 100%;
+  margin: 10px auto 12px;
+}
+body[data-layout="mobile"] .mobile-round-slot .round-panel {
+  position: static;
+  padding: 12px;
+}
+body[data-layout="mobile"] .mobile-round-slot .round-number { margin: 3px 0 10px; }
+body[data-layout="mobile"] .mobile-round-slot .round-number strong { font-size: 3rem; }
+body[data-layout="mobile"] .mobile-round-slot .round-panel h2 { margin-bottom: 9px; font-size: 1rem; }
+body[data-layout="mobile"] .mobile-round-slot .round-panel ol { gap: 5px; font-size: .7rem; line-height: 1.3; }
+body[data-layout="mobile"] .mobile-round-slot .phase-track { margin-top: 11px; grid-template-columns: repeat(3, 1fr); }
+body[data-layout="mobile"] .mobile-round-slot .phase-track span { padding: 6px 4px; border-left: 0; border-bottom: 2px solid #33454e; text-align: center; font-size: .61rem; }
+body[data-layout="mobile"] .mobile-round-slot .phase-track span.active { border-bottom-color: var(--teal); }
+
+/* Topbar mobile em uma única linha: Reiniciar, Manual, Discord, Sair e identidade. */
+body[data-layout="mobile"] .topbar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+body[data-layout="mobile"] .topbar-status,
+body[data-layout="mobile"] .topbar-brand { display: none; }
+body[data-layout="mobile"] .topbar-controls {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: max-content;
+  min-width: max-content;
+}
+body[data-layout="mobile"] .topbar-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 5px;
+  width: auto;
+}
+body[data-layout="mobile"] .top-action {
+  min-height: 34px;
+  padding: 0 8px;
+  font-size: .63rem;
+  white-space: nowrap;
+}
+body[data-layout="mobile"] .topbar-identity {
+  order: initial;
+  justify-content: flex-start;
+  min-width: max-content;
+  gap: 5px;
+  white-space: nowrap;
+}
+body[data-layout="mobile"] .topbar-identity .color-badge,
+body[data-layout="mobile"] .topbar-identity .spectator-badge { min-height: 25px; padding: 3px 7px; font-size: .62rem; }
+body[data-layout="mobile"] .topbar-identity strong { max-width: 105px; font-size: .68rem; }
+
+/* Ordem mobile: fases, adversários, tanque, movimentos, placar e registros. */
+body[data-layout="mobile"] .opponents-strip { margin-top: 0; }
+body[data-layout="mobile"] .game-stage { display: flex; flex-direction: column; }
+body[data-layout="mobile"] .my-tank-card { order: 1; }
+body[data-layout="mobile"] .right-rail { display: contents; }
+body[data-layout="mobile"] .right-rail .action-panel { order: 2; width: 100%; }
+body[data-layout="mobile"] .left-rail { order: 3; width: 100%; position: static; }
+body[data-layout="mobile"] .left-rail .round-panel { display: none; }
+body[data-layout="mobile"] .left-rail .population-panel { width: 100%; }
+body[data-layout="mobile"] .right-rail .log-panel { order: 4; width: 100%; }
+body[data-layout="mobile"] .action-panel h2 { font-size: 1.05rem; }
+body[data-layout="mobile"] .action-panel p,
+body[data-layout="mobile"] .movement-alert,
+body[data-layout="mobile"] .coin-rule-note { font-size: .7rem; }
+body[data-layout="mobile"] .movement-dashboard h2 { font-size: 1.2rem; }
+body[data-layout="mobile"] .movement-score strong { font-size: 3rem; }
+body[data-layout="mobile"] .movement-score span { font-size: 1.25rem; }
