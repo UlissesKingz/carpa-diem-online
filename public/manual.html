@@ -40,10 +40,12 @@
         </div>
       </div>
       <div class="manual-hero-visual" aria-hidden="true">
-        <img class="manual-hero-gif" src="/assets/fish-animation.gif" alt="">
-        <div class="hero-carp hero-carp-yellow"><img src="/assets/carp-yellow.png" alt=""></div>
-        <div class="hero-carp hero-carp-red"><img src="/assets/carp-red.png" alt=""></div>
-        <div class="hero-carp hero-carp-white"><img src="/assets/carp-white.png" alt=""></div>
+        <div class="hero-board-card">
+          <div class="hero-board-label">Exemplo de tanque do jogador</div>
+          <div class="hero-tank-shell">
+            <div id="heroGrid" class="manual-grid hero-grid"></div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -118,10 +120,10 @@
         <div class="manual-card setup-list">
           <h3>Cada tanque recebe</h3>
           <ul class="component-list">
-            <li><span class="component-art"><img src="/assets/carp-yellow.png" alt="Carpa amarela"></span><strong>7 carpas amarelas</strong></li>
-            <li><span class="component-art"><img src="/assets/carp-white.png" alt="Carpa branca"></span><strong>7 carpas brancas</strong></li>
-            <li><span class="component-art"><img src="/assets/carp-red.png" alt="Carpa vermelha"></span><strong>7 carpas vermelhas</strong></li>
-            <li><span class="component-art"><img src="/assets/carp-gray.png" alt="Carpa cinza"></span><strong>7 carpas cinzas</strong></li>
+            <li><span class="component-art"><img class="component-carp" src="/assets/carp-yellow.png" alt="Carpa amarela"></span><strong>7 carpas amarelas</strong></li>
+            <li><span class="component-art"><img class="component-carp" src="/assets/carp-white.png" alt="Carpa branca"></span><strong>7 carpas brancas</strong></li>
+            <li><span class="component-art"><img class="component-carp" src="/assets/carp-red.png" alt="Carpa vermelha"></span><strong>7 carpas vermelhas</strong></li>
+            <li><span class="component-art"><img class="component-carp" src="/assets/carp-gray.png" alt="Carpa cinza"></span><strong>7 carpas cinzas</strong></li>
             <li><span class="component-art"><img src="/assets/algae.png" alt="Alga"></span><strong>5 algas</strong></li>
             <li><span class="component-art"><img src="/assets/shoal.png" alt="Cardume"></span><strong>1 cardume</strong></li>
           </ul>
@@ -172,9 +174,7 @@
             <h3>Alga</h3>
             <p>Mover a alga é gratuito, mas o próximo movimento deve obrigatoriamente ser realizado com uma carpa.</p>
           </div>
-          <div class="obligation-flow">
-            <span><img src="/assets/algae.png" alt=""> move</span><b>→</b><span><img src="/assets/carp-white.png" alt=""> carpa obrigatória</span>
-          </div>
+          <div class="before-after obligation-example" data-example="algae"></div>
         </article>
 
         <article class="manual-card rule-card">
@@ -190,9 +190,10 @@
 
       <div class="manual-card correction-card">
         <div class="correction-visual">
-          <div class="correction-row"><span></span><span></span><span class="empty"></span><span></span><span></span><span></span><span></span></div>
-          <div class="correction-arrow">↑</div>
-          <div class="correction-piece"><img src="/assets/carp-gray.png" alt="Carpa cinza"></div>
+          <div class="correction-piece correction-top"><img src="/assets/carp-gray.png" alt="Carpa cinza"></div>
+          <div class="correction-row"><span></span><span></span><span></span><span class="empty"></span><span></span><span></span><span></span></div>
+          <div class="correction-piece correction-bottom"><img src="/assets/carp-white.png" alt="Carpa branca"></div>
+          <div class="correction-arrows"><span>↓</span><span>↑</span></div>
         </div>
         <div>
           <p class="eyebrow">Após o 12º movimento</p>
@@ -231,8 +232,8 @@
 
       <div class="player-count-grid">
         <article class="manual-card circulation-mode"><h3>2 jogadores</h3><div class="route route-two"><span>A</span><b>⇄</b><span>B</span></div><p>Os dois tanques trocam diretamente suas linhas.</p></article>
-        <article class="manual-card circulation-mode"><h3>3 jogadores</h3><div class="route"><span>A</span><b>→</b><span>B</span><b>→</b><span>C</span><b>↺</b></div><p>A envia para B, B para C e C para A.</p></article>
-        <article class="manual-card circulation-mode"><h3>4 jogadores</h3><div class="route"><span>A</span><b>→</b><span>B</span><b>→</b><span>C</span><b>→</b><span>D</span><b>↺</b></div><p>Forma-se um circuito fechado entre os quatro tanques.</p></article>
+        <article class="manual-card circulation-mode"><h3>3 jogadores</h3><div class="route"><span>A</span><b>→</b><span>B</span><b>→</b><span>C</span><b>→</b><span>A</span></div><p>A envia para B, B para C e C para A.</p></article>
+        <article class="manual-card circulation-mode"><h3>4 jogadores</h3><div class="route"><span>A</span><b>→</b><span>B</span><b>→</b><span>C</span><b>→</b><span>D</span><b>→</b><span>A</span></div><p>Forma-se um circuito fechado entre os quatro tanques.</p></article>
       </div>
     </section>
 

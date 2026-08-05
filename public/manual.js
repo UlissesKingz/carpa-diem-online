@@ -17,13 +17,21 @@
     shoal: 'Cardume'
   };
 
-  function pieceImage(type, rotation = 0) {
-    return `<img src="${assets[type]}" alt="${alt[type]}" style="transform:rotate(${rotation}deg)">`;
+  function pieceImage(type, rotation = 0, extraClass = '') {
+    return `<img class="${extraClass}" src="${assets[type]}" alt="${alt[type]}" style="transform:rotate(${rotation}deg)">`;
+  }
+
+  function renderGrid(gridId, arrangement, rotations) {
+    const grid = document.querySelector(gridId);
+    if (!grid) return;
+    grid.innerHTML = arrangement.map((type, index) => {
+      if (!type) return '<span class="manual-grid-cell empty" aria-label="Espaço central vazio"></span>';
+      const pieceClass = ['yellow', 'white', 'red', 'gray'].includes(type) ? 'carp' : type;
+      return `<span class="manual-grid-cell ${pieceClass}">${pieceImage(type, rotations[index] || 0)}</span>`;
+    }).join('');
   }
 
   function renderSetupGrid() {
-    const grid = document.querySelector('#setupGrid');
-    if (!grid) return;
     const arrangement = [
       'yellow','red','red','white','gray','algae','red',
       'white','red','white','gray','red','gray','white',
@@ -31,30 +39,94 @@
       'white','red','yellow','algae','gray','gray','yellow',
       'gray','yellow','algae','shoal','red','yellow','white'
     ];
-    const rotations = [0,180,0,0,0,180,0,180,0,0,0,180,0,180,0,0,0,0,180,0,180,0,90,0,180,0,180,0,0,180,0,0,180,0,90];
-    grid.innerHTML = arrangement.map((type, index) => {
-      if (!type) return '<span class="manual-grid-cell empty" aria-label="Espaço central vazio"></span>';
-      const pieceClass = ['yellow','white','red','gray'].includes(type) ? 'carp' : type;
-      return `<span class="manual-grid-cell ${pieceClass}">${pieceImage(type, rotations[index])}</span>`;
-    }).join('');
+    const rotations = [90,0,0,90,90,0,0,90,0,90,90,0,90,90,90,0,90,0,180,90,0,90,0,90,0,180,90,90,90,90,0,0,0,90,90];
+    renderGrid('#setupGrid', arrangement, rotations);
   }
 
-  function miniGrid(cells) {
-    return `<div class="example-mini-grid">${cells.map((cell) => {
-      if (!cell) return '<span class="example-mini-cell empty"></span>';
+  function renderHeroGrid() {
+    const arrangement = [
+      'yellow','white','algae','red','gray','red','white',
+      'red','gray','white','yellow','red','algae','gray',
+      'white','yellow','red',null,'gray','white','yellow',
+      'gray','algae','white','red','yellow','gray','red',
+      'shoal','red','yellow','white','algae','yellow','gray'
+    ];
+    const rotations = [90,90,0,0,90,0,90,0,90,90,90,0,0,0,90,90,90,0,180,90,90,90,0,90,0,90,90,0,0,90,90,90,0,0,90];
+    renderGrid('#heroGrid', arrangement, rotations);
+  }
+
+  function exampleBoard(cells, cols = 3, cellClass = '') {
+    return `<div class="example-board" style="--cols:${cols}">${cells.map((cell) => {
+      if (!cell) return '<span class="example-board-cell empty"></span>';
       const type = typeof cell === 'string' ? cell : cell.type;
       const rotation = typeof cell === 'string' ? 0 : (cell.rotation || 0);
-      const cls = type === 'shoal' ? 'shoal' : '';
-      return `<span class="example-mini-cell ${cls}">${pieceImage(type, rotation)}</span>`;
+      const extra = typeof cell === 'string' ? '' : (cell.className || '');
+      const cls = ['yellow','white','red','gray'].includes(type) ? 'carp' : type;
+      return `<span class="example-board-cell ${cls} ${cellClass} ${extra}">${pieceImage(type, rotation)}</span>`;
     }).join('')}</div>`;
   }
 
   function renderMovementExamples() {
     document.querySelectorAll('[data-example="carp"]').forEach((container) => {
-      container.innerHTML = `${miniGrid(['red', null, 'gray', 'algae'])}<span class="example-arrow">→</span>${miniGrid([null, { type: 'red', rotation: 270 }, 'gray', 'algae'])}`;
+      container.innerHTML = [
+        exampleBoard([
+          { type: 'red', rotation: 90 },
+          null,
+          { type: 'gray', rotation: 90 },
+          { type: 'algae', rotation: 0 },
+          { type: 'white', rotation: 90 },
+          { type: 'yellow', rotation: 90 }
+        ], 3),
+        '<span class="example-arrow">→</span>',
+        exampleBoard([
+          null,
+          { type: 'red', rotation: 0, className: 'highlight' },
+          { type: 'gray', rotation: 90 },
+          { type: 'algae', rotation: 0 },
+          { type: 'white', rotation: 90 },
+          { type: 'yellow', rotation: 90 }
+        ], 3)
+      ].join('');
     });
+
+    document.querySelectorAll('[data-example="algae"]').forEach((container) => {
+      container.innerHTML = [
+        exampleBoard([
+          { type: 'algae', rotation: 0 },
+          null,
+          { type: 'white', rotation: 90 },
+          { type: 'gray', rotation: 90 },
+          { type: 'red', rotation: 90 },
+          { type: 'yellow', rotation: 90 }
+        ], 3),
+        '<span class="example-arrow">→</span>',
+        `<div class="algae-step-flow">
+          <div class="algae-step"><span class="step-label">1</span>${pieceImage('algae', 0)}<small>alga move grátis</small></div>
+          <div class="algae-step"><span class="step-label">2</span>${pieceImage('white', 90)}<small>carpa obrigatória</small></div>
+        </div>`
+      ].join('');
+    });
+
     document.querySelectorAll('[data-example="shoal"]').forEach((container) => {
-      container.innerHTML = `${miniGrid(['yellow', null, 'shoal', 'gray'])}<span class="example-arrow">→</span>${miniGrid(['yellow', 'shoal', null, 'gray'])}`;
+      container.innerHTML = [
+        exampleBoard([
+          { type: 'yellow', rotation: 90 },
+          null,
+          { type: 'white', rotation: 90 },
+          { type: 'shoal', rotation: 0 },
+          { type: 'gray', rotation: 90 },
+          { type: 'red', rotation: 90 }
+        ], 3),
+        '<span class="example-arrow">→</span>',
+        exampleBoard([
+          { type: 'yellow', rotation: 90 },
+          { type: 'shoal', rotation: 0, className: 'highlight' },
+          { type: 'white', rotation: 90 },
+          null,
+          { type: 'gray', rotation: 90 },
+          { type: 'red', rotation: 90 }
+        ], 3)
+      ].join('');
     });
   }
 
@@ -65,7 +137,7 @@
     const sequence = ['yellow','algae','yellow','shoal','red','yellow','white'];
     const html = sequence.map((type) => {
       const cls = ['yellow','white','red','gray'].includes(type) ? 'carp' : type;
-      return `<span class="current-piece ${cls}">${pieceImage(type, type === 'shoal' ? 90 : 90)}</span>`;
+      return `<span class="current-piece ${cls}">${pieceImage(type, type === 'shoal' ? 0 : 90)}</span>`;
     }).join('');
     origin.innerHTML = html;
     destination.innerHTML = html;
@@ -92,6 +164,7 @@
   }
 
   function initialize() {
+    renderHeroGrid();
     renderSetupGrid();
     renderMovementExamples();
     renderCurrent();
