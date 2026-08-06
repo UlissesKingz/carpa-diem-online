@@ -521,7 +521,7 @@
       const mode = entryRole === 'solo' ? 'solo' : 'multiplayer';
       const response = await emit('createRoom', { name, color, mode });
       if (response?.ok) {
-        saveIdentity({ name, color, ...response });
+        saveIdentity({ name, color, ...response, roomMode: mode === 'solo' ? 'solo' : (response.roomMode || mode) });
         render();
       }
     });
@@ -563,7 +563,7 @@
           </div>
           <p class="muted">${state.mode === 'solo' ? 'Modo solo · você pode iniciar imediatamente. Espectadores são opcionais e podem entrar usando este código.' : `${players.length}/4 jogadores · Cores livres: ${available.map((color) => COLOR_LABELS[color]).join(', ') || 'nenhuma'}`}</p>
           <section class="spectator-list"><h2>Espectadores <span>${spectators.length}</span></h2>${spectators.length ? spectators.map((spectator) => `<p><span class="connection ${spectator.connected ? 'online' : ''}"></span>${escapeHtml(spectator.name)}</p>`).join('') : '<p class="muted">Nenhum espectador conectado.</p>'}</section>
-          ${current?.id === state.hostId ? `<button id="startGame" class="primary-button" ${state.mode === 'solo' ? '' : (players.length < 2 ? 'disabled' : '')}>Iniciar partida</button>` : identity.role === 'spectator' ? '<p class="waiting">Você está assistindo à sala de espera.</p>' : '<p class="waiting">Aguardando o anfitrião iniciar...</p>'}
+          ${current?.id === state.hostId ? `<button id="startGame" class="primary-button" ${(state.mode === 'solo' || identity.roomMode === 'solo' || entryRole === 'solo') ? '' : (players.length < 2 ? 'disabled' : '')}>Iniciar partida</button>` : identity.role === 'spectator' ? '<p class="waiting">Você está assistindo à sala de espera.</p>' : '<p class="waiting">Aguardando o anfitrião iniciar...</p>'}
           </section>
         </div>
         ${serverConnectionUiHtml()}
@@ -585,7 +585,10 @@
       notice = 'Código copiado.';
       render();
     });
-    document.querySelector('#startGame')?.addEventListener('click', () => emit('startGame'));
+    document.querySelector('#startGame')?.addEventListener('click', () => {
+      const mode = state.mode === 'solo' || identity.roomMode === 'solo' || entryRole === 'solo' ? 'solo' : 'multiplayer';
+      emit('startGame', { mode });
+    });
   }
 
   function playerHasFinishedCurrentPhase(player) {

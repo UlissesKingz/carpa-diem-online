@@ -122,6 +122,7 @@ function adminAuth(req, res, next) {
 function roomSummary(room) {
   return {
     code: room.code,
+    mode: room.mode || 'multiplayer',
     status: room.status,
     phase: room.phase,
     round: room.round,
@@ -148,6 +149,7 @@ function roomSummary(room) {
       name: spectator.name,
       connected: spectator.connected
     })),
+    solo: room.solo ? { exitedPreferred: room.solo.exitedPreferred, automaLine: room.solo.automaLine } : null,
     winner: room.winner ? {
       playerIds: room.winner.playerIds,
       score: room.winner.score,
@@ -343,7 +345,7 @@ function clearSocketRoom(socket) {
 io.on('connection', (socket) => {
   socket.on('createRoom', safeHandler(socket, (payload = {}) => {
     if (!COLORS.includes(payload.color)) throw new Error('Escolha uma cor válida.');
-    const room = uniqueRoom({ hostName: payload.name, color: payload.color, socketId: socket.id });
+    const room = uniqueRoom({ hostName: payload.name, color: payload.color, socketId: socket.id, mode: payload.mode });
     rooms.set(room.code, room);
     const player = room.players[room.hostId];
     storage.ensureAudit(room);
@@ -355,6 +357,7 @@ io.on('connection', (socket) => {
       memberId: player.id,
       memberToken: player.token,
       role: 'player',
+      roomMode: room.mode,
       color: player.color
     };
   }));
@@ -401,6 +404,7 @@ io.on('connection', (socket) => {
       memberId: player.id,
       memberToken: player.token,
       role: 'player',
+      roomMode: room.mode,
       color: player.color
     };
   }));
@@ -437,7 +441,8 @@ io.on('connection', (socket) => {
       roomCode: room.code,
       memberId: spectator.id,
       memberToken: spectator.token,
-      role: 'spectator'
+      role: 'spectator',
+      roomMode: room.mode
     };
   }));
 
@@ -468,9 +473,15 @@ io.on('connection', (socket) => {
     return {};
   }));
 
-  socket.on('startGame', safeHandler(socket, () => {
+  socket.on('startGame', safeHandler(socket, (payload = {}) => {
     const room = roomForSocket(socket);
     if (socket.data.memberRole !== 'player') throw new Error('Espectadores não podem iniciar a partida.');
+
+    // Compatibilidade com salas solo criadas antes de o modo ser corretamente persistido.
+    if (payload.mode === 'solo' && room.status === 'lobby' && room.playerOrder.length === 1) {
+      room.mode = 'solo';
+    }
+
     startGame(room, socket.data.memberId);
     emitRoom(room);
     return {};
@@ -479,9 +490,10 @@ io.on('connection', (socket) => {
   socket.on('requestRestart', safeHandler(socket, () => {
     const room = roomForSocket(socket);
     if (socket.data.memberRole !== 'player') throw new Error('Espectadores não participam da decisão.');
-    requestRestart(room, socket.data.memberId);
+    const result = requestRestart(room, socket.data.memberId) || {};
+    if (result.restarted) cancelCirculationTimer(room.code);
     emitRoom(room);
-    return {};
+    return result;
   }));
 
   socket.on('respondRestart', safeHandler(socket, (payload = {}) => {
