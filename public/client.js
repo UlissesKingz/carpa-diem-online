@@ -300,8 +300,9 @@
       <img
         class="piece-art piece-${piece.type} ${lastMoved ? 'last-moved-art' : ''}"
         src="${src}"
-        alt="${label}"
+        alt=""
         title="${label}"
+        aria-hidden="true"
         draggable="false"
       >
     </span>
@@ -656,6 +657,25 @@
     </section>`;
   }
 
+  function pieceGuideHtml() {
+    const items = [
+      { key: 'yellow', name: 'Carpa', text: 'Move 1 casa para o vazio.' },
+      { key: 'algae', name: 'Planta', text: 'Não gasta movimento; depois dela, mova uma carpa.' },
+      { key: 'shoal', name: 'Tesourinhas', text: 'Invadem o vazio ao lado e gastam 1 movimento.' },
+      { key: 'sturgeon', name: 'Esturjão', text: 'Empurra a fileira ou coluna até o vazio. Custa 3.' },
+      { key: 'dojo', name: 'Dojô', text: 'Vai pela diagonal até o vazio. Custa 1.' },
+      { key: 'papaTerra', name: 'Papa-terra', text: 'Troca com a peça entre ele e o vazio. É grátis.' }
+    ];
+    return `<section class="piece-guide-card">
+      <div class="piece-guide-header"><p class="eyebrow">Resumo das peças</p><strong>Como cada peça se comporta</strong></div>
+      <div class="piece-guide-grid">${items.map(({ key, name, text }) => `
+        <article class="piece-guide-item">
+          <span class="piece-guide-icon">${createPieceHtml({ type: key === 'yellow' ? 'carp' : key, color: key === 'yellow' ? 'yellow' : undefined, rotation: 90, id: `guide-${key}` }, 'guide', -1, -1, { tiny: true })}</span>
+          <div><h3>${name}</h3><p>${text}</p></div>
+        </article>`).join('')}</div>
+    </section>`;
+  }
+
   function populationScorePanelHtml() {
     const scores = state.liveScores?.scores;
     if (!scores) return '';
@@ -928,6 +948,7 @@
               </div>
             </header>
             ${boardHtml(current, { interactive: state.phase === 'movement' || state.phase === 'development' })}
+            ${pieceGuideHtml()}
           </section>
           ${mobilePhaseActionHtml(current)}
           <aside class="right-rail">${panel}${logPanelHtml()}</aside>
