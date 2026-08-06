@@ -561,9 +561,9 @@
           <div class="player-list">
             ${players.map((player) => `<article class="player-row"><span class="connection ${player.connected ? 'online' : ''}"></span>${playerNameChip(player)}${colorBadge(player.color)}${player.id === state.hostId ? '<em>Anfitrião</em>' : ''}</article>`).join('')}
           </div>
-          <p class="muted">${state.mode === 'solo' ? 'Modo solo · espectadores podem entrar usando este código.' : `${players.length}/4 jogadores · Cores livres: ${available.map((color) => COLOR_LABELS[color]).join(', ') || 'nenhuma'}`}</p>
+          <p class="muted">${state.mode === 'solo' ? 'Modo solo · você pode iniciar imediatamente. Espectadores são opcionais e podem entrar usando este código.' : `${players.length}/4 jogadores · Cores livres: ${available.map((color) => COLOR_LABELS[color]).join(', ') || 'nenhuma'}`}</p>
           <section class="spectator-list"><h2>Espectadores <span>${spectators.length}</span></h2>${spectators.length ? spectators.map((spectator) => `<p><span class="connection ${spectator.connected ? 'online' : ''}"></span>${escapeHtml(spectator.name)}</p>`).join('') : '<p class="muted">Nenhum espectador conectado.</p>'}</section>
-          ${current?.id === state.hostId ? `<button id="startGame" class="primary-button" ${state.mode !== 'solo' && players.length < 2 ? 'disabled' : ''}>${state.mode === 'solo' ? 'Iniciar modo solo' : 'Iniciar partida'}</button>` : identity.role === 'spectator' ? '<p class="waiting">Você está assistindo à sala de espera.</p>' : '<p class="waiting">Aguardando o anfitrião iniciar...</p>'}
+          ${current?.id === state.hostId ? `<button id="startGame" class="primary-button" ${state.mode === 'solo' ? '' : (players.length < 2 ? 'disabled' : '')}>Iniciar partida</button>` : identity.role === 'spectator' ? '<p class="waiting">Você está assistindo à sala de espera.</p>' : '<p class="waiting">Aguardando o anfitrião iniciar...</p>'}
           </section>
         </div>
         ${serverConnectionUiHtml()}
