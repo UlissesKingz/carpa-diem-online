@@ -29,7 +29,7 @@
         <h1 id="manualTitle">Crie, espalhe e faça sua carpa prosperar.</h1>
         <p class="manual-lead">Carpa Diem é um jogo abstrato de movimentação, circulação e crescimento. Você reorganiza seu tanque, envia peças pela Correnteza e tenta terminar a partida com a maior população da sua cor preferida em todo o ecossistema.</p>
         <div class="manual-meta" aria-label="Resumo do jogo">
-          <span><strong>2–4</strong> jogadores</span>
+          <span><strong>Solo ou 2–4</strong> jogadores</span>
           <span><strong>6</strong> rodadas</span>
           <span><strong>12</strong> movimentos por rodada</span>
           <span>Informação aberta</span>
@@ -56,6 +56,7 @@
       <a href="#movimentacao">Movimentação</a>
       <a href="#correnteza">Correnteza</a>
       <a href="#venda">Venda e reposição</a>
+      <a href="#solo">Modo solo</a>
       <a href="#pontuacao">Fim de jogo</a>
       <a href="#online">Jogo online</a>
     </nav>
@@ -115,25 +116,40 @@
       <div class="section-heading">
         <p class="eyebrow">Preparação</p>
         <h2>34 peças e exatamente 1 espaço vazio.</h2>
+        <p>Todos os tanques começam com as 28 carpas. A quantidade de plantas e peças especiais muda conforme o modo e o número de jogadores.</p>
       </div>
       <div class="setup-layout">
         <div class="manual-card setup-list">
-          <h3>Cada tanque recebe</h3>
-          <ul class="component-list">
-            <li><span class="component-art"><img class="component-carp" src="/assets/carp-yellow.png" alt="Carpa amarela"></span><strong>7 carpas amarelas</strong></li>
-            <li><span class="component-art"><img class="component-carp" src="/assets/carp-white.png" alt="Carpa branca"></span><strong>7 carpas brancas</strong></li>
-            <li><span class="component-art"><img class="component-carp" src="/assets/carp-red.png" alt="Carpa vermelha"></span><strong>7 carpas vermelhas</strong></li>
-            <li><span class="component-art"><img class="component-carp" src="/assets/carp-gray.png" alt="Carpa cinza"></span><strong>7 carpas cinzas</strong></li>
-            <li><span class="component-art"><img src="/assets/algae.png" alt="Alga"></span><strong>5 algas</strong></li>
-            <li><span class="component-art"><img src="/assets/shoal.png" alt="Cardume"></span><strong>1 cardume</strong></li>
+          <h3>Carpas em cada tanque</h3>
+          <ul class="component-list component-list-carps">
+            <li><span class="component-art"><img class="component-carp" src="/assets/carp-yellow.png" alt="Carpa amarela"></span><strong>7 amarelas</strong></li>
+            <li><span class="component-art"><img class="component-carp" src="/assets/carp-white.png" alt="Carpa branca"></span><strong>7 brancas</strong></li>
+            <li><span class="component-art"><img class="component-carp" src="/assets/carp-red.png" alt="Carpa vermelha"></span><strong>7 vermelhas</strong></li>
+            <li><span class="component-art"><img class="component-carp" src="/assets/carp-gray.png" alt="Carpa cinza"></span><strong>7 cinzas</strong></li>
           </ul>
-          <div class="manual-note"><strong>Importante:</strong> as peças são distribuídas aleatoriamente, mas o espaço central exato começa vazio.</div>
+
+          <h3 class="setup-subtitle">Plantas e peças especiais</h3>
+          <div class="setup-variants">
+            <article><strong>Solo e 2 jogadores</strong><span>4 plantas + 2 peças especiais diferentes em cada tanque.</span></article>
+            <article><strong>3 jogadores</strong><span>5 plantas + 1 peça especial diferente em cada tanque.</span></article>
+            <article><strong>4 jogadores</strong><span>5 plantas + 1 peça especial diferente em cada tanque.</span></article>
+          </div>
+
+          <div class="special-pieces-strip" aria-label="Peças especiais">
+            <span><img src="/assets/tesourinhas.png" alt="Tesourinhas"><b>Tesourinhas</b></span>
+            <span><img src="/assets/sturgeon.png" alt="Esturjão"><b>Esturjão</b></span>
+            <span><img src="/assets/dojo.png" alt="Dojô"><b>Dojô</b></span>
+            <span><img src="/assets/papa-terra.png" alt="Papa-terra"><b>Papa-terra</b></span>
+          </div>
+
+          <div class="manual-note"><strong>Peças únicas:</strong> em partidas com várias pessoas existe apenas uma unidade de cada peça especial. A mesma peça especial nunca começa em dois tanques diferentes.</div>
+          <div class="manual-note"><strong>Centro vazio:</strong> todas as peças são distribuídas aleatoriamente, mas a casa central exata começa sem peça.</div>
         </div>
         <div class="manual-card setup-board-card">
-          <div class="mini-tank-shell" aria-label="Exemplo visual da configuração inicial">
+          <div class="mini-tank-shell" aria-label="Exemplo visual da configuração inicial para solo ou dois jogadores">
             <div id="setupGrid" class="manual-grid"></div>
           </div>
-          <div class="center-empty-key"><span></span> Espaço central vazio</div>
+          <div class="center-empty-key"><span></span> Exemplo: 4 plantas, 2 especiais e centro vazio</div>
         </div>
       </div>
     </section>
@@ -153,47 +169,73 @@
       <div class="section-heading">
         <p class="eyebrow">Fase 1</p>
         <h2>Fase de Movimentação</h2>
-        <p>Mova uma peça ortogonalmente adjacente para o espaço vazio. Diagonais não são permitidas.</p>
+        <p>Carpas e plantas são escolhidas pelo jogador. As quatro peças especiais reagem automaticamente quando o espaço vazio cria a condição da ação.</p>
       </div>
 
-      <div class="rule-grid">
-        <article class="manual-card rule-card">
+      <div class="manual-note special-priority-note"><strong>Prioridade automática:</strong> apenas uma peça especial reage a cada novo espaço vazio, nesta ordem: Tesourinhas → Papa-terra → Dojô → Esturjão. O quadro de movimentos informa o que aconteceu e quantos movimentos foram consumidos.</div>
+
+      <div class="rule-grid expanded-rule-grid">
+        <article class="manual-card rule-card rule-card-carp">
           <div class="rule-icon"><img src="/assets/carp-red.png" alt="Carpa"></div>
           <div class="rule-copy">
             <span class="cost-badge">−1 movimento</span>
             <h3>Carpa</h3>
-            <p>Deslize a carpa para o espaço vazio. Ela gira e termina apontada na direção do deslocamento.</p>
+            <p>Deslize uma carpa ortogonalmente para o espaço vazio. Ela termina apontada na direção do deslocamento.</p>
           </div>
           <div class="before-after" data-example="carp"></div>
-          <figure class="rule-animation">
-            <img src="/assets/movimento-carpa.gif" alt="Animação demonstrando o movimento de uma carpa para o espaço vazio">
-          </figure>
+          <figure class="rule-animation"><img src="/assets/movimento-carpa.gif" alt="Animação do movimento de uma carpa para o espaço vazio"></figure>
         </article>
 
-        <article class="manual-card rule-card">
-          <div class="rule-icon"><img src="/assets/algae.png" alt="Alga"></div>
+        <article class="manual-card rule-card rule-card-algae">
+          <div class="rule-icon"><img src="/assets/algae.png" alt="Planta"></div>
           <div class="rule-copy">
             <span class="cost-badge free">0 movimentos</span>
-            <h3>Alga</h3>
-            <p>Mover a alga é gratuito, mas o próximo movimento deve obrigatoriamente ser realizado com uma carpa.</p>
+            <h3>Planta</h3>
+            <p>Mover uma planta é gratuito, mas o movimento seguinte deve obrigatoriamente ser feito com uma carpa.</p>
           </div>
           <div class="before-after obligation-example" data-example="algae"></div>
-          <figure class="rule-animation">
-            <img src="/assets/movimento-planta.gif" alt="Animação demonstrando o movimento gratuito da alga e a carpa obrigatória seguinte">
-          </figure>
+          <figure class="rule-animation"><img src="/assets/movimento-planta.gif" alt="Animação do movimento gratuito da planta seguido por uma carpa"></figure>
         </article>
 
-        <article class="manual-card rule-card">
-          <div class="rule-icon"><img src="/assets/shoal.png" alt="Cardume"></div>
+        <article class="manual-card rule-card rule-card-special rule-card-shoal">
+          <div class="rule-icon"><img src="/assets/tesourinhas.png" alt="Tesourinhas"></div>
           <div class="rule-copy">
             <span class="cost-badge">−1 movimento</span>
-            <h3>Cardume</h3>
-            <p>Ele não pode ser movido diretamente. Quando o vazio fica ao lado dele, o cardume invade o espaço automaticamente.</p>
+            <h3>Tesourinhas</h3>
+            <p>Quando o vazio surge ortogonalmente ao lado delas, ocupam esse espaço automaticamente.</p>
           </div>
           <div class="before-after" data-example="shoal"></div>
-          <figure class="rule-animation">
-            <img src="/assets/movimento-cardume.gif" alt="Animação demonstrando o cardume invadindo automaticamente o espaço vazio adjacente">
-          </figure>
+          <figure class="rule-animation"><img src="/assets/movimento-cardume.gif" alt="Animação das Tesourinhas ocupando o vazio adjacente"></figure>
+        </article>
+
+        <article class="manual-card rule-card rule-card-special rule-card-sturgeon">
+          <div class="rule-icon"><img src="/assets/sturgeon.png" alt="Esturjão"></div>
+          <div class="rule-copy">
+            <span class="cost-badge heavy">−3 movimentos</span>
+            <h3>Esturjão</h3>
+            <p>Se o vazio estiver na mesma linha ou coluna, empurra todas as peças à sua frente uma casa em direção ao vazio. O custo é sempre 3, independentemente da quantidade empurrada.</p>
+          </div>
+          <figure class="rule-animation"><img src="/assets/movimento-esturjao.gif" alt="Animação do Esturjão empurrando uma sequência de peças até o espaço vazio"></figure>
+        </article>
+
+        <article class="manual-card rule-card rule-card-special rule-card-dojo">
+          <div class="rule-icon"><img src="/assets/dojo.png" alt="Dojô"></div>
+          <div class="rule-copy">
+            <span class="cost-badge">−1 movimento</span>
+            <h3>Dojô</h3>
+            <p>Se o vazio estiver em qualquer casa da diagonal, atravessa por baixo das peças e aparece diretamente no espaço vazio.</p>
+          </div>
+          <figure class="rule-animation"><img src="/assets/movimento-dojo.gif" alt="Animação do Dojô atravessando o tanque pela diagonal até o espaço vazio"></figure>
+        </article>
+
+        <article class="manual-card rule-card rule-card-special rule-card-papa">
+          <div class="rule-icon"><img src="/assets/papa-terra.png" alt="Papa-terra"></div>
+          <div class="rule-copy">
+            <span class="cost-badge free">0 movimentos</span>
+            <h3>Papa-terra</h3>
+            <p>Quando há exatamente uma peça entre ele e o vazio, ortogonalmente, troca de lugar com essa peça. O espaço vazio permanece onde estava.</p>
+          </div>
+          <figure class="rule-animation"><img src="/assets/movimento-papa-terra.gif" alt="Animação do Papa-terra trocando de lugar com a peça entre ele e o vazio"></figure>
         </article>
       </div>
 
@@ -212,9 +254,7 @@
       </div>
 
       <div class="manual-card money-action-card">
-        <div class="coin-stack" aria-hidden="true">
-          <img src="/assets/coin.png" alt=""><img src="/assets/coin.png" alt=""><img src="/assets/coin.png" alt="">
-        </div>
+        <div class="coin-stack" aria-hidden="true"><img src="/assets/coin.png" alt=""><img src="/assets/coin.png" alt=""><img src="/assets/coin.png" alt=""></div>
         <div>
           <p class="eyebrow">Movimento extra</p>
           <h3>3 moedas = +1 movimento</h3>
@@ -280,6 +320,55 @@
       </div>
     </section>
 
+    <section id="solo" class="manual-section solo-section">
+      <div class="section-heading">
+        <p class="eyebrow">Desafio individual</p>
+        <h2>Modo solo e a linha Automa</h2>
+        <p>Você joga sozinho contra o próprio recorde. Espectadores podem assistir, mas não são necessários para iniciar a partida.</p>
+      </div>
+
+      <div class="solo-intro-grid">
+        <article class="manual-card solo-info-card"><span>1</span><h3>Preparação</h3><p>Seu tanque começa com 28 carpas, 4 plantas, 2 peças especiais aleatórias e o centro vazio.</p></article>
+        <article class="manual-card solo-info-card"><span>2</span><h3>Automa visível</h3><p>Acima do tanque aparece uma linha com 7 peças. Ela mostra exatamente o que entrará na próxima Correnteza.</p></article>
+        <article class="manual-card solo-info-card"><span>3</span><h3>Venda normal</h3><p>Depois da Correnteza, a fase de Venda e reposição funciona da mesma maneira que nas partidas com várias pessoas.</p></article>
+      </div>
+
+      <div class="manual-card automa-example-card">
+        <div class="automa-example-copy">
+          <p class="eyebrow">Próxima linha</p>
+          <h3>Leia o Automa antes de planejar seus movimentos.</h3>
+          <p>No fim da fase, as 7 peças da sua linha central saem pela esquerda e as 7 peças mostradas pelo Automa entram pela direita, mantendo a ordem.</p>
+        </div>
+        <div class="manual-automa-line" aria-label="Exemplo de uma linha do Automa">
+          <span><img src="/assets/carp-yellow.png" alt="Carpa amarela"></span>
+          <span><img src="/assets/algae.png" alt="Planta"></span>
+          <span><img src="/assets/carp-white.png" alt="Carpa branca"></span>
+          <span><img src="/assets/dojo.png" alt="Dojô"></span>
+          <span><img src="/assets/carp-red.png" alt="Carpa vermelha"></span>
+          <span><img src="/assets/carp-gray.png" alt="Carpa cinza"></span>
+          <span><img src="/assets/carp-yellow.png" alt="Carpa amarela"></span>
+        </div>
+      </div>
+
+      <div class="solo-flow-grid">
+        <article><strong>1. Saída</strong><span>As 7 peças da linha central deixam o tanque.</span></article>
+        <article><strong>2. Registro</strong><span>As carpas da sua cor preferida que saíram entram na pontuação.</span></article>
+        <article><strong>3. Entrada</strong><span>A linha do Automa ocupa a linha central na mesma sequência.</span></article>
+        <article><strong>4. Reposição</strong><span>Realize normalmente a Venda e reposição.</span></article>
+      </div>
+
+      <div class="manual-card solo-special-rule">
+        <div><p class="eyebrow">Peças especiais no Automa</p><h3>Cada peça especial continua sendo única.</h3></div>
+        <p>Uma especial que já estiver no seu tanque não pode aparecer na linha Automa. Quando ela sair pela Correnteza, ficará uma rodada inteira ausente antes de poder ser sorteada novamente.</p>
+      </div>
+
+      <div class="manual-card solo-score-example">
+        <div><p class="eyebrow">Pontuação final</p><h3>Carpas preferidas que saíram + carpas preferidas que permaneceram</h3></div>
+        <div class="solo-score-formula"><span>12 que saíram</span><b>+</b><span>9 no tanque</span><b>=</b><strong>21 pontos</strong></div>
+        <p>Após a 6ª rodada, o jogo mostra seu resultado, salva o recorde neste navegador, dá os parabéns e sugere tirar um print. Você pode reiniciar ou sair.</p>
+      </div>
+    </section>
+
     <section id="pontuacao" class="manual-section">
       <div class="section-heading">
         <p class="eyebrow">Fim da 6ª rodada</p>
@@ -310,7 +399,7 @@
         <h2>Regras de sala e controles</h2>
       </div>
       <div class="online-grid">
-        <article class="manual-card online-card"><span>👁</span><h3>Espectadores</h3><p>Podem assistir à partida e aos tanques, mas não jogam nem participam das votações.</p></article>
+        <article class="manual-card online-card"><span>👁</span><h3>Espectadores</h3><p>Podem assistir às partidas, inclusive no modo solo, mas nunca são necessários para iniciar e não participam das votações.</p></article>
         <article class="manual-card online-card"><span>↶</span><h3>Desfazer</h3><p>Durante a Movimentação, você pode desfazer suas jogadas enquanto ainda não tiver concluído a fase.</p></article>
         <article class="manual-card online-card"><span>⏸</span><h3>Desconexão</h3><p>Se um jogador cair, a partida é pausada até seu retorno. Os demais podem sair para a tela inicial.</p></article>
         <article class="manual-card online-card"><span>↻</span><h3>Reinício</h3><p>Uma partida só é reiniciada quando todos os jogadores aprovam. Espectadores não votam.</p></article>
@@ -325,12 +414,15 @@
         <h2>O essencial em uma tela</h2>
       </div>
       <div class="reference-grid">
-        <div class="reference-block"><strong>Carpa</strong><span>Move 1 casa</span><b>−1 movimento</b></div>
-        <div class="reference-block"><strong>Alga</strong><span>Move 1 casa e obriga carpa</span><b>0 movimentos</b></div>
-        <div class="reference-block"><strong>Cardume</strong><span>Invade o vazio adjacente</span><b>−1 movimento</b></div>
+        <div class="reference-block"><strong>Carpa</strong><span>Desliza para o vazio</span><b>−1 movimento</b></div>
+        <div class="reference-block"><strong>Planta</strong><span>Move e obriga uma carpa</span><b>0 movimentos</b></div>
+        <div class="reference-block"><strong>Tesourinhas</strong><span>Invadem o vazio adjacente</span><b>−1 movimento</b></div>
+        <div class="reference-block"><strong>Esturjão</strong><span>Empurra linha ou coluna</span><b>−3 movimentos</b></div>
+        <div class="reference-block"><strong>Dojô</strong><span>Atravessa pela diagonal</span><b>−1 movimento</b></div>
+        <div class="reference-block"><strong>Papa-terra</strong><span>Troca com a peça intermediária</span><b>0 movimentos</b></div>
         <div class="reference-block"><strong>Correnteza</strong><span>Transfere 7 peças na ordem</span><b>Linha central</b></div>
         <div class="reference-block"><strong>Venda</strong><span>Menor cor → preferida</span><b>+1 moeda</b></div>
-        <div class="reference-block"><strong>Moedas</strong><span>Compre movimento extra</span><b>3 = +1</b></div>
+        <div class="reference-block"><strong>Modo solo</strong><span>Saídas preferidas + tanque final</span><b>Seu recorde</b></div>
       </div>
       <div class="manual-final-actions">
         <a class="primary-button" href="/device.html">Começar a jogar</a>

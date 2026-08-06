@@ -5,7 +5,10 @@
     red: '/assets/carp-red.png',
     gray: '/assets/carp-gray.png',
     algae: '/assets/algae.png',
-    shoal: '/assets/shoal.png'
+    shoal: '/assets/tesourinhas.png',
+    sturgeon: '/assets/sturgeon.png',
+    dojo: '/assets/dojo.png',
+    papaTerra: '/assets/papa-terra.png'
   };
 
   const alt = {
@@ -14,7 +17,10 @@
     red: 'Carpa vermelha',
     gray: 'Carpa cinza',
     algae: 'Alga',
-    shoal: 'Cardume'
+    shoal: 'Tesourinhas',
+    sturgeon: 'Esturjão',
+    dojo: 'Dojô',
+    papaTerra: 'Papa-terra'
   };
 
   function pieceImage(type, rotation = 0, extraClass = '') {
@@ -37,7 +43,7 @@
       'white','red','white','gray','red','gray','white',
       'white','algae','yellow',null,'gray','yellow','algae',
       'white','red','yellow','algae','gray','gray','yellow',
-      'gray','yellow','algae','shoal','red','yellow','white'
+      'gray','yellow','sturgeon','shoal','red','yellow','white'
     ];
     const rotations = [90,0,0,90,90,0,0,90,0,90,90,0,90,90,90,0,90,0,180,90,0,90,0,90,0,180,90,90,90,90,0,0,0,90,90];
     renderGrid('#setupGrid', arrangement, rotations);
@@ -46,10 +52,10 @@
   function renderHeroGrid() {
     const arrangement = [
       'yellow','white','algae','red','gray','red','white',
-      'red','gray','white','yellow','red','algae','gray',
+      'gray','gray','white','yellow','red','algae','gray',
       'white','yellow','red',null,'gray','white','yellow',
       'gray','algae','white','red','yellow','gray','red',
-      'shoal','red','yellow','white','algae','yellow','gray'
+      'dojo','red','yellow','white','algae','yellow','papaTerra'
     ];
     const rotations = [90,90,0,0,90,0,90,0,90,90,90,0,0,0,90,90,90,0,180,90,90,90,0,90,0,90,90,0,0,90,90,90,0,0,90];
     renderGrid('#heroGrid', arrangement, rotations);
