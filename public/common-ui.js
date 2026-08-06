@@ -1,6 +1,6 @@
 (() => {
   const DISCORD_URL = 'https://discord.gg/EJCHTwQjDz';
-  const COPYRIGHT_TEXT = 'Jogo criado por Ulisses Reis © 2026 — Propriedade intelectual protegida. Reprodução, distribuição ou uso não autorizado são proibidos.';
+  const COPYRIGHT_TEXT = 'Jogo criado por Ulisses Reis e Marcelo Torres © 2026 — Propriedade intelectual protegida. Reprodução, distribuição ou uso não autorizado são proibidos.';
 
   function ensureFooter() {
     if (document.querySelector('.copyright-footer')) return;
