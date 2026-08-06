@@ -19,7 +19,10 @@
     red: '/assets/carp-red.png',
     gray: '/assets/carp-gray.png',
     algae: '/assets/algae.png',
-    shoal: '/assets/shoal.png',
+    shoal: '/assets/tesourinhas.png',
+    sturgeon: '/assets/sturgeon.png',
+    dojo: '/assets/dojo.png',
+    papaTerra: '/assets/papa-terra.png',
     coin: '/assets/coin.png',
     moneyBag: '/assets/money-bag.png',
     fishAnimation: '/assets/fish-animation.gif'
@@ -42,7 +45,7 @@
   let identity = loadIdentity();
   let notice = '';
   let movementError = '';
-  let entryRole = identity.role === 'spectator' ? 'spectator' : 'player';
+  let entryRole = identity.role === 'spectator' ? 'spectator' : (identity.roomMode === 'solo' ? 'solo' : 'multiplayer');
   let localRestartConfirm = false;
   let localExitConfirm = false;
   let clearEntryAfterExit = false;
@@ -164,7 +167,7 @@
       state = null;
       notice = '';
       movementError = '';
-      entryRole = 'player';
+      entryRole = 'multiplayer';
       render();
     }
   });
@@ -229,6 +232,17 @@
           orientationStyle: `--start-rotation:${Number(action.shoal.fromRotation || 0)}deg;--piece-rotation:${Number(action.shoal.toRotation ?? piece.rotation ?? 0)}deg;`
         };
       }
+      const specialMove = action.special?.moves?.find((move) => move.pieceId === piece.id && move.to?.row === row && move.to?.col === col);
+      if (specialMove) {
+        const dx = specialMove.from.col - specialMove.to.col;
+        const dy = specialMove.from.row - specialMove.to.row;
+        return {
+          shellClass: `animate-special animate-special-${action.special.type}`,
+          shellStyle: `--move-x:${dx};--move-y:${dy};`,
+          orientationClass: specialMove.oriented ? 'animate-orient-shoal' : '',
+          orientationStyle: `--start-rotation:${Number(specialMove.fromRotation || 0)}deg;--piece-rotation:${Number(specialMove.toRotation ?? piece.rotation ?? 0)}deg;`
+        };
+      }
     }
 
     if (action.type === 'replace' && action.playerId === playerId && action.pieceId === piece.id && action.position?.row === row && action.position?.col === col) {
@@ -270,7 +284,8 @@
     const animation = pieceAnimation(playerId, row, col, piece);
     const rotation = Number(piece.rotation || 0);
     const src = piece.type === 'carp' ? ASSETS[piece.color] : ASSETS[piece.type];
-    const label = piece.type === 'carp' ? `Carpa ${COLOR_LABELS[piece.color]}` : piece.type === 'algae' ? 'Alga' : 'Cardume de pequenos peixes';
+    const SPECIAL_LABELS = { shoal: 'Tesourinhas', sturgeon: 'Esturjão', dojo: 'Dojô', papaTerra: 'Papa-terra' };
+    const label = piece.type === 'carp' ? `Carpa ${COLOR_LABELS[piece.color]}` : piece.type === 'algae' ? 'Planta' : (SPECIAL_LABELS[piece.type] || 'Peça especial');
     const lastMoved = state?.phase === 'movement' && state?.players?.[playerId]?.lastMovedPieceId === piece.id;
     const orientationStyle = animation.orientationStyle || `--piece-rotation:${rotation}deg;--start-rotation:${rotation}deg;`;
     return `
@@ -370,7 +385,7 @@
       <header class="topbar">
         <div class="topbar-status">
           <span class="eyebrow">Sala ${state.code}</span>
-          <strong>${state.status === 'lobby' ? 'Aguardando jogadores' : `Rodada ${state.round}/${state.constants.maxRounds}`}</strong>
+          <strong>${state.status === 'lobby' ? (state.mode === 'solo' ? 'Modo solo' : 'Aguardando jogadores') : `${state.mode === 'solo' ? 'Solo · ' : ''}Rodada ${state.round}/${state.constants.maxRounds}`}</strong>
           <span class="phase-pill">${PHASE_LABELS[state.phase]}</span>
         </div>
         <div class="topbar-brand">${logoHtml('topbar-logo')}</div>
@@ -393,8 +408,9 @@
     if (state.phase === 'movement') {
       return [
         `Faça ${state.constants.movesPerRound} movimentos usando o espaço vazio.`,
-        'Mover uma alga não gasta movimento; depois dela, mova uma carpa.',
-        'O cardume invade o vazio adjacente e gasta 1 movimento.',
+        'Mover uma planta não gasta movimento; depois dela, mova uma carpa.',
+        'Peças especiais se ativam automaticamente, com prioridade: Tesourinhas, Papa-terra, Dojô e Esturjão.',
+        'Tesourinhas e Dojô gastam 1; Esturjão gasta 3; Papa-terra é gratuito.',
         'Se o vazio terminar na linha central, preencha-o com um movimento extra.',
         `A cada ${state.constants.extraMoveCost} moedas, compre 1 movimento extra.`
       ];
@@ -409,13 +425,21 @@
       ];
     }
     if (state.phase === 'circulation') {
-      return [
-        'As 7 peças da linha central saem pela esquerda.',
-        'A sequência das peças é preservada.',
-        'Cada linha entra pela direita no tanque seguinte.',
-        'A fase de Venda e reposição começa depois da Correnteza.'
-      ];
+      return state.mode === 'solo'
+        ? [
+            'As 7 peças da linha central saem pela esquerda.',
+            'As carpas da sua cor preferida que saírem entram na pontuação solo.',
+            'A linha do Automa entra pela direita mantendo a ordem.',
+            'Depois da Correnteza, ocorre normalmente a Venda e reposição.'
+          ]
+        : [
+            'As 7 peças da linha central saem pela esquerda.',
+            'A sequência das peças é preservada.',
+            'Cada linha entra pela direita no tanque seguinte.',
+            'A fase de Venda e reposição começa depois da Correnteza.'
+          ];
     }
+    if (state.mode === 'solo') return ['Some as carpas preferidas que saíram pela Correnteza às que ficaram no tanque.', 'Esse total é o seu resultado solo.', 'Tente superar o recorde salvo neste navegador.'];
     return ['Conte todas as carpas de cada cor nos tanques.', 'A maior pontuação vence.', 'Em empate de carpas, vence quem tiver mais moedas.'];
   }
 
@@ -442,6 +466,19 @@
         <span class="swatch swatch-${color}"></span>${COLOR_LABELS[color]}
       </label>`).join('');
 
+    const isPlayerMode = entryRole === 'multiplayer' || entryRole === 'solo';
+    const roleLead = entryRole === 'solo'
+      ? 'Desafie seu próprio recorde enquanto espectadores acompanham pelo código da sala.'
+      : entryRole === 'spectator'
+        ? 'Informe o código para acompanhar uma partida sem interferir nas jogadas.'
+        : 'Jogue de 2 a 4 pessoas e faça sua carpa preferida prosperar.';
+
+    const actions = entryRole === 'solo'
+      ? '<button id="createRoom" class="primary-button">Criar sala solo</button>'
+      : entryRole === 'multiplayer'
+        ? '<button id="createRoom" class="primary-button">Criar sala</button><div class="join-row"><input id="roomCode" maxlength="4" placeholder="CÓDIGO"><button id="joinRoom" class="secondary-button">Entrar</button></div>'
+        : '<div class="join-row"><input id="roomCode" maxlength="4" placeholder="CÓDIGO"><button id="joinRoom" class="secondary-button">Assistir</button></div>';
+
     app.innerHTML = `
       <main class="entry-shell">
         <div class="initial-stack">
@@ -450,18 +487,16 @@
           <section class="entry-card">
           <p class="eyebrow">Carpas Online · MVP 6</p>
           <h1>Entre no ecossistema</h1>
-          <p class="lead">Jogue de 2 a 4 pessoas ou acompanhe uma partida como espectador.</p>
+          <p class="lead">${roleLead}</p>
           ${notice ? `<div class="notice error">${escapeHtml(notice)}</div>` : ''}
-          <div class="role-switch">
-            <button class="role-tab ${entryRole === 'player' ? 'active' : ''}" data-role="player">Jogador</button>
+          <div class="role-switch three-tabs">
+            <button class="role-tab ${entryRole === 'multiplayer' ? 'active' : ''}" data-role="multiplayer">2–4 Jogadores</button>
+            <button class="role-tab ${entryRole === 'solo' ? 'active' : ''}" data-role="solo">Solo</button>
             <button class="role-tab ${entryRole === 'spectator' ? 'active' : ''}" data-role="spectator">Espectador</button>
           </div>
           <label>Seu nome<input id="playerName" maxlength="24" value="${escapeHtml(identity.name || '')}" placeholder="Nome"></label>
-          ${entryRole === 'player' ? `<fieldset><legend>Carpa preferida</legend><div class="color-options">${colorButtons}</div></fieldset>` : '<p class="spectator-note">Espectadores veem todos os tanques, mas não movimentam peças nem participam da votação de reinício.</p>'}
-          <div class="entry-actions">
-            ${entryRole === 'player' ? '<button id="createRoom" class="primary-button">Criar sala</button>' : ''}
-            <div class="join-row"><input id="roomCode" maxlength="4" placeholder="CÓDIGO"><button id="joinRoom" class="secondary-button">${entryRole === 'player' ? 'Entrar' : 'Assistir'}</button></div>
-          </div>
+          ${isPlayerMode ? `<fieldset><legend>Carpa preferida</legend><div class="color-options">${colorButtons}</div></fieldset>` : '<p class="spectator-note">Espectadores veem todos os tanques, mas não movimentam peças nem participam da votação de reinício.</p>'}
+          <div class="entry-actions">${actions}</div>
           <a class="small-link" href="/device.html">Trocar versão</a>
           </section>
         </div>
@@ -482,14 +517,15 @@
       const name = document.querySelector('#playerName').value.trim();
       const color = document.querySelector('input[name="color"]:checked')?.value;
       if (!name) { notice = 'Digite seu nome.'; return render(); }
-      const response = await emit('createRoom', { name, color });
+      const mode = entryRole === 'solo' ? 'solo' : 'multiplayer';
+      const response = await emit('createRoom', { name, color, mode });
       if (response?.ok) {
         saveIdentity({ name, color, ...response });
         render();
       }
     });
 
-    document.querySelector('#joinRoom').addEventListener('click', async () => {
+    document.querySelector('#joinRoom')?.addEventListener('click', async () => {
       const name = document.querySelector('#playerName').value.trim();
       const roomCode = document.querySelector('#roomCode').value.trim().toUpperCase();
       if (!name || roomCode.length !== 4) { notice = 'Informe seu nome e o código da sala.'; return render(); }
@@ -524,9 +560,9 @@
           <div class="player-list">
             ${players.map((player) => `<article class="player-row"><span class="connection ${player.connected ? 'online' : ''}"></span>${playerNameChip(player)}${colorBadge(player.color)}${player.id === state.hostId ? '<em>Anfitrião</em>' : ''}</article>`).join('')}
           </div>
-          <p class="muted">${players.length}/4 jogadores · Cores livres: ${available.map((color) => COLOR_LABELS[color]).join(', ') || 'nenhuma'}</p>
+          <p class="muted">${state.mode === 'solo' ? 'Modo solo · espectadores podem entrar usando este código.' : `${players.length}/4 jogadores · Cores livres: ${available.map((color) => COLOR_LABELS[color]).join(', ') || 'nenhuma'}`}</p>
           <section class="spectator-list"><h2>Espectadores <span>${spectators.length}</span></h2>${spectators.length ? spectators.map((spectator) => `<p><span class="connection ${spectator.connected ? 'online' : ''}"></span>${escapeHtml(spectator.name)}</p>`).join('') : '<p class="muted">Nenhum espectador conectado.</p>'}</section>
-          ${current?.id === state.hostId ? `<button id="startGame" class="primary-button" ${players.length < 2 ? 'disabled' : ''}>Iniciar partida</button>` : identity.role === 'spectator' ? '<p class="waiting">Você está assistindo à sala de espera.</p>' : '<p class="waiting">Aguardando o anfitrião iniciar...</p>'}
+          ${current?.id === state.hostId ? `<button id="startGame" class="primary-button" ${state.mode !== 'solo' && players.length < 2 ? 'disabled' : ''}>${state.mode === 'solo' ? 'Iniciar modo solo' : 'Iniciar partida'}</button>` : identity.role === 'spectator' ? '<p class="waiting">Você está assistindo à sala de espera.</p>' : '<p class="waiting">Aguardando o anfitrião iniciar...</p>'}
           </section>
         </div>
         ${serverConnectionUiHtml()}
@@ -539,7 +575,7 @@
       if (!response?.ok) return;
       clearRoomIdentity();
       state = null;
-      entryRole = 'player';
+      entryRole = 'multiplayer';
       notice = '';
       render();
     });
@@ -600,6 +636,26 @@
       }).join('');
   }
 
+  function automaLineHtml() {
+    if (state.mode !== 'solo' || !['movement', 'circulation'].includes(state.phase) || !state.solo?.automaLine?.length) return '';
+    return `<section class="automa-card">
+      <div><p class="eyebrow">Automa</p><strong>Próxima linha</strong></div>
+      <div class="automa-line">${state.solo.automaLine.map((piece, index) => `<span class="automa-cell">${createPieceHtml(piece, 'automa', 0, index, { tiny: true })}</span>`).join('')}</div>
+    </section>`;
+  }
+
+  function soloScorePanelHtml() {
+    if (state.mode !== 'solo') return '';
+    const current = me() || state.players[state.playerOrder[0]];
+    const remaining = current?.board?.flat().filter((piece) => piece?.type === 'carp' && piece.color === current.color).length || 0;
+    return `<section class="population-panel solo-score-panel">
+      <p class="eyebrow">Pontuação solo</p>
+      <h2>Carpas preferidas</h2>
+      <div class="solo-score-row"><span>Já saíram</span><strong>${state.solo?.exitedPreferred || 0}</strong></div>
+      <div class="solo-score-row"><span>No tanque agora</span><strong>${remaining}</strong></div>
+    </section>`;
+  }
+
   function populationScorePanelHtml() {
     const scores = state.liveScores?.scores;
     if (!scores) return '';
@@ -633,6 +689,7 @@
         <div class="coin-rule-note"><img src="${ASSETS.coin}" alt=""><span><strong>${state.constants.extraMoveCost} moedas</strong> compram 1 movimento extra. As moedas gastas são abatidas.</span></div>
         ${!isCompactMobile() && canFinish ? '<button id="finishMovement" class="primary-button">Concluir movimentação</button>' : ''}
         ${!isCompactMobile() && current.movementReady && waitingForOtherPlayersMessage() ? '<button class="secondary-button try-next-phase" data-wait-phase="movement">Continuar para a próxima fase</button>' : ''}
+        ${current.specialAlert ? `<p class="special-action-alert" role="status">${escapeHtml(current.specialAlert)}</p>` : ''}
         <p class="movement-alert ${movementError ? 'visible' : ''}" role="alert" aria-live="assertive">${movementError ? escapeHtml(movementError) : '&nbsp;'}</p>
       </section>`;
   }
@@ -668,11 +725,23 @@
 
 
   function circulationPanel() {
-    return `<section class="action-panel circulation-panel"><p class="phase-kicker">Fase da Correnteza</p><h2>As peças seguem a correnteza</h2><div class="flow-graphic"><span>◀</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><p>As peças saem pela esquerda e entram no próximo tanque na mesma sequência.</p></section>`;
+    const description = state.mode === 'solo'
+      ? 'Sua linha central sai pela esquerda e a linha exibida pelo Automa entra pela direita, na mesma sequência.'
+      : 'As peças saem pela esquerda e entram no próximo tanque na mesma sequência.';
+    return `<section class="action-panel circulation-panel"><p class="phase-kicker">Fase da Correnteza</p><h2>As peças seguem a correnteza</h2><div class="flow-graphic"><span>◀</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><p>${description}</p></section>`;
   }
 
   function scorePanel() {
     if (!state.winner) return '';
+    if (state.winner.solo) {
+      const player = state.players[state.winner.playerIds[0]];
+      const score = Number(state.winner.soloScore || state.winner.score || 0);
+      const recordKey = `carpasSoloRecord:${player.color}`;
+      const previousRecord = Number(localStorage.getItem(recordKey) || 0);
+      const record = Math.max(previousRecord, score);
+      localStorage.setItem(recordKey, String(record));
+      return `<div class="modal-backdrop final-results-backdrop"><section class="result-card final-results-card solo-result-card">${logoHtml('result-logo')}<p class="eyebrow">Resultado do modo solo</p><h1>Parabéns, ${escapeHtml(player.name)}!</h1><div class="solo-final-score"><strong>${score}</strong><span>carpas preferidas</span></div><p>${state.winner.exitedPreferred} saíram pela Correnteza e ${state.winner.remainingPreferred} permaneceram no tanque.</p><p class="solo-record">Seu recorde salvo neste navegador: <strong>${record}</strong></p><p class="print-suggestion">Tire um print do resultado e compartilhe seu recorde.</p><div class="final-result-actions"><button id="finalRestartGame" class="primary-button">↻ Reiniciar partida</button><button id="finalExitGame" class="secondary-button">Sair</button></div></section></div>`;
+    }
     const rankingSource = state.winner.ranking || state.playerOrder.map((id) => ({
       playerId: id,
       score: state.winner.scores[state.players[id].color],
@@ -684,8 +753,6 @@
     const restartButton = identity.role === 'player' ? '<button id="finalRestartGame" class="primary-button">↻ Reiniciar partida</button>' : '';
     return `<div class="modal-backdrop final-results-backdrop"><section class="result-card final-results-card">${logoHtml('result-logo')}<p class="eyebrow">Resultado final</p><h1>${title}</h1><p class="result-rule">Primeiro conta-se o total de carpas. Em empate, vence quem tiver mais moedas.</p><div class="ranking">${ranking.map(({ player, score, coins }, index) => `<div class="${index === 0 ? 'winner-row' : ''}"><strong>${index + 1}º</strong>${playerNameChip(player)}${colorBadge(player.color)}<span>${score} carpas</span><span class="ranking-coins"><img src="${ASSETS.coin}" alt="">${coins}</span></div>`).join('')}</div><div class="final-result-actions">${restartButton}<button id="finalExitGame" class="secondary-button">Sair</button></div></section></div>`;
   }
-
-
 
   function logPanelHtml() {
     return `<section class="log-panel"><header><h2>Registro</h2><span>${state.logs.length}</span></header>${state.logs.slice().reverse().slice(0, 14).map((log) => {
@@ -717,6 +784,9 @@
 
   function restartUiHtml() {
     if (localRestartConfirm) {
+      if (state.mode === 'solo') {
+        return `<div class="modal-backdrop decision-backdrop"><section class="modal-card"><p class="eyebrow">Novo desafio</p><h2>Reiniciar a partida solo?</h2><p>O tanque, a linha do Automa e a pontuação serão reiniciados.</p><div class="modal-actions"><button id="cancelRestart" class="secondary-button">Cancelar</button><button id="confirmRestart" class="danger-button">Reiniciar</button></div></section></div>`;
+      }
       return `<div class="modal-backdrop decision-backdrop"><section class="modal-card"><p class="eyebrow">Confirmar solicitação</p><h2>Reiniciar a partida?</h2><p>Os outros jogadores receberão um pedido de confirmação. A partida só será reiniciada se todos aceitarem.</p><div class="modal-actions"><button id="cancelRestart" class="secondary-button">Cancelar</button><button id="confirmRestart" class="danger-button">Solicitar reinício</button></div></section></div>`;
     }
 
@@ -757,7 +827,7 @@
     }
 
     state = null;
-    entryRole = 'player';
+    entryRole = 'multiplayer';
     notice = '';
     movementError = '';
     localRestartConfirm = false;
@@ -810,7 +880,7 @@
         clearRoomIdentity();
       }
       state = null;
-      entryRole = 'player';
+      entryRole = 'multiplayer';
       notice = '';
       movementError = '';
       localExitConfirm = false;
@@ -846,8 +916,9 @@
         <div class="mobile-round-slot">${roundPanelHtml()}</div>
         <section class="opponents-strip">${opponentsHtml()}</section>
         <main class="game-stage">
-          <aside class="left-rail">${roundPanelHtml()}${populationScorePanelHtml()}</aside>
+          <aside class="left-rail">${roundPanelHtml()}${state.mode === 'solo' ? soloScorePanelHtml() : populationScorePanelHtml()}</aside>
           <section class="my-tank-card">
+            ${automaLineHtml()}
             <header>
               <div class="tank-player-heading"><p class="eyebrow">Seu tanque</p><div class="player-title-line"><h1>${escapeHtml(current.name)}</h1><span class="preferred-carp-label">Sua carpa preferida:<img src="${ASSETS[current.color]}" alt="Carpa ${COLOR_LABELS[current.color]}"></span></div></div>
               <div class="tank-header-actions">
@@ -874,7 +945,7 @@
             return;
           }
           const response = await emit('movePiece', { from: { row, col } });
-          if (response?.ok) interactionLockedUntil = Date.now() + 620;
+          if (response?.ok) interactionLockedUntil = Date.now() + (response.specialMoved ? 920 : 620);
         }
         if (state.phase === 'development') emit('replaceFish', { position: { row, col } });
       });
@@ -904,7 +975,7 @@
     const boards = state.playerOrder.map((id) => {
       const player = state.players[id];
       const status = playerPhaseStatus(player, { spectatorView: true });
-      return `<article class="spectator-board-card"><header>${playerNameChip(player)}${colorBadge(player.color)}<span class="connection ${player.connected ? 'online' : ''}"></span></header>${boardHtml(player, { spectator: true })}<footer class="spectator-phase-status ${status.waiting ? 'phase-waiting-footer' : ''}">${status.text}</footer></article>`;
+      return `<article class="spectator-board-card"><header>${playerNameChip(player)}${colorBadge(player.color)}<span class="connection ${player.connected ? 'online' : ''}"></span></header>${state.mode === 'solo' ? automaLineHtml() : ''}${boardHtml(player, { spectator: true })}<footer class="spectator-phase-status ${status.waiting ? 'phase-waiting-footer' : ''}">${status.text}</footer></article>`;
     }).join('');
 
     app.innerHTML = `
@@ -919,7 +990,7 @@
         ${scorePanel()}
         <div class="mobile-round-slot">${roundPanelHtml()}</div>
         <main class="spectator-stage">
-          <aside class="left-rail">${roundPanelHtml()}${populationScorePanelHtml()}</aside>
+          <aside class="left-rail">${roundPanelHtml()}${state.mode === 'solo' ? soloScorePanelHtml() : populationScorePanelHtml()}</aside>
           <section class="spectator-board-grid">${boards}</section>
           <aside class="right-rail"><section class="action-panel spectator-mode"><p class="phase-kicker">Modo espectador</p><h2>Acompanhamento aberto</h2><p>Você vê todos os tanques em tempo real, mas não interfere nas decisões da partida.</p></section>${logPanelHtml()}</aside>
         </main>

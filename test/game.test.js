@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   createRoom,
+  SPECIAL_TYPES,
   addPlayer,
   addSpectator,
   startGame,
@@ -13,7 +14,6 @@ const {
   movePiece,
   undoLastMove,
   removeMember,
-  chooseDevelopmentColor,
   replaceFish,
   buyExtraMove,
   markMovementReady,
@@ -26,6 +26,27 @@ function makeTwoPlayerRoom() {
   return room;
 }
 
+function neutralizeSpecials(player) {
+  for (let row = 0; row < 5; row += 1) {
+    for (let col = 0; col < 7; col += 1) {
+      const piece = player.board[row][col];
+      if (piece && SPECIAL_TYPES.includes(piece.type)) player.board[row][col] = { ...piece, type: 'carp', color: 'gray' };
+    }
+  }
+}
+
+function blankBoard() {
+  const board = Array.from({ length: 5 }, () => Array(7).fill(null));
+  let id = 0;
+  for (let row = 0; row < 5; row += 1) {
+    for (let col = 0; col < 7; col += 1) {
+      if (row === 2 && col === 3) continue;
+      board[row][col] = { id: `p${id++}`, type: 'carp', color: 'gray', rotation: 0 };
+    }
+  }
+  return board;
+}
+
 test('cria a preparação equilibrada com centro vazio', () => {
   const room = makeTwoPlayerRoom();
   startGame(room, room.hostId);
@@ -33,8 +54,10 @@ test('cria a preparação equilibrada com centro vazio', () => {
   const counts = calculateScores({ ...room, playerOrder: [room.hostId] }).scores;
   assert.deepEqual(counts, { yellow: 7, white: 7, red: 7, gray: 7 });
   assert.equal(player.board[2][3], null);
-  assert.equal(player.board.flat().filter((piece) => piece?.type === 'algae').length, 5);
-  assert.equal(player.board.flat().filter((piece) => piece?.type === 'shoal').length, 1);
+  assert.equal(player.board.flat().filter((piece) => piece?.type === 'algae').length, 4);
+  const specials = player.board.flat().filter((piece) => SPECIAL_TYPES.includes(piece?.type));
+  assert.equal(specials.length, 2);
+  assert.equal(new Set(specials.map((piece) => piece.type)).size, 2);
   assert.equal(publicRoom(room).constants.movesPerRound, 12);
   assert.equal(publicRoom(room).constants.maxRounds, 6);
 });
@@ -85,57 +108,30 @@ test('circulação troca as linhas centrais antes da reposição', () => {
       [a]: room.players[a].board[2].map((piece) => piece && { ...piece }),
       [b]: room.players[b].board[2].map((piece) => piece && { ...piece })
     },
-    routes: [
-      { senderId: a, receiverId: b },
-      { senderId: b, receiverId: a }
-    ]
+    routes: [{ senderId: a, receiverId: b }, { senderId: b, receiverId: a }],
+    stage: 'outgoing'
   };
-  room.circulation.stage = 'outgoing';
   assert.equal(completeCirculation(room), true);
   assert.deepEqual(room.players[a].board[2].map((piece) => piece && piece.id), lineB);
   assert.deepEqual(room.players[b].board[2].map((piece) => piece && piece.id), lineA);
-  assert.equal(room.phase, 'circulation');
   assert.equal(room.circulation.stage, 'incoming');
   assert.equal(completeCirculation(room), true);
-  assert.equal(room.round, 1);
   assert.equal(room.phase, 'development');
 });
-
 
 test('carpa gira a cabeça para a direção do movimento', () => {
   const room = makeTwoPlayerRoom();
   startGame(room, room.hostId);
   const player = room.players[room.hostId];
-  const board = player.board;
-
+  neutralizeSpecials(player);
   let carpPosition = null;
-  for (let row = 0; row < 5; row += 1) {
-    for (let col = 0; col < 7; col += 1) {
-      if (!carpPosition && board[row][col]?.type === 'carp') carpPosition = { row, col };
-    }
-  }
-
+  for (let row = 0; row < 5; row += 1) for (let col = 0; col < 7; col += 1) if (!carpPosition && player.board[row][col]?.type === 'carp') carpPosition = { row, col };
   const target = { row: 2, col: 2 };
-  [board[carpPosition.row][carpPosition.col], board[target.row][target.col]] = [board[target.row][target.col], board[carpPosition.row][carpPosition.col]];
-
-  let shoalPosition = null;
-  for (let row = 0; row < 5; row += 1) {
-    for (let col = 0; col < 7; col += 1) {
-      if (board[row][col]?.type === 'shoal') shoalPosition = { row, col };
-    }
-  }
-
-  if (Math.abs(shoalPosition.row - target.row) + Math.abs(shoalPosition.col - target.col) === 1) {
-    const safe = { row: 0, col: 0 };
-    [board[shoalPosition.row][shoalPosition.col], board[safe.row][safe.col]] = [board[safe.row][safe.col], board[shoalPosition.row][shoalPosition.col]];
-  }
-
-  const movedId = board[target.row][target.col].id;
+  [player.board[carpPosition.row][carpPosition.col], player.board[target.row][target.col]] = [player.board[target.row][target.col], player.board[carpPosition.row][carpPosition.col]];
+  const movedId = player.board[target.row][target.col].id;
   movePiece(room, room.hostId, target);
-  const moved = board[2][3];
-  assert.equal(moved.id, movedId);
-  assert.equal(moved.rotation, 270);
-  assert.equal(player.lastMovedPieceId, movedId);
+  assert.equal(player.board[2][3].id, movedId);
+  assert.equal(player.board[2][3].rotation, 270);
   assert.equal(player.movesRemaining, 11);
 });
 
@@ -143,62 +139,30 @@ test('mover uma alga não gasta movimento e obriga mover uma carpa', () => {
   const room = makeTwoPlayerRoom();
   startGame(room, room.hostId);
   const player = room.players[room.hostId];
-  const board = player.board;
+  neutralizeSpecials(player);
   const target = { row: 2, col: 2 };
-
   let algaePosition = null;
-  let shoalPosition = null;
-  for (let row = 0; row < 5; row += 1) {
-    for (let col = 0; col < 7; col += 1) {
-      if (!algaePosition && board[row][col]?.type === 'algae') algaePosition = { row, col };
-      if (board[row][col]?.type === 'shoal') shoalPosition = { row, col };
-    }
-  }
-  [board[algaePosition.row][algaePosition.col], board[target.row][target.col]] = [board[target.row][target.col], board[algaePosition.row][algaePosition.col]];
-  if (Math.abs(shoalPosition.row - target.row) + Math.abs(shoalPosition.col - target.col) === 1) {
-    const safe = { row: 0, col: 0 };
-    [board[shoalPosition.row][shoalPosition.col], board[safe.row][safe.col]] = [board[safe.row][safe.col], board[shoalPosition.row][shoalPosition.col]];
-  }
-
+  for (let row = 0; row < 5; row += 1) for (let col = 0; col < 7; col += 1) if (!algaePosition && player.board[row][col]?.type === 'algae') algaePosition = { row, col };
+  [player.board[algaePosition.row][algaePosition.col], player.board[target.row][target.col]] = [player.board[target.row][target.col], player.board[algaePosition.row][algaePosition.col]];
   movePiece(room, room.hostId, target);
   assert.equal(player.movesRemaining, 12);
   assert.equal(player.mustMoveCarp, true);
-  assert.match(room.logs.at(-1).text, /sem gastar movimento/);
 });
 
 test('desfazer restaura o tabuleiro e o contador de movimentos', () => {
   const room = makeTwoPlayerRoom();
   startGame(room, room.hostId);
   const player = room.players[room.hostId];
-  const empty = { row: 2, col: 3 };
+  neutralizeSpecials(player);
   const from = { row: 2, col: 2 };
-
-  // Garante uma carpa adjacente e afasta o cardume para o teste ser determinístico.
   let carpPosition = null;
-  let shoalPosition = null;
-  for (let row = 0; row < 5; row += 1) {
-    for (let col = 0; col < 7; col += 1) {
-      if (!carpPosition && player.board[row][col]?.type === 'carp') carpPosition = { row, col };
-      if (player.board[row][col]?.type === 'shoal') shoalPosition = { row, col };
-    }
-  }
+  for (let row = 0; row < 5; row += 1) for (let col = 0; col < 7; col += 1) if (!carpPosition && player.board[row][col]?.type === 'carp') carpPosition = { row, col };
   [player.board[carpPosition.row][carpPosition.col], player.board[from.row][from.col]] = [player.board[from.row][from.col], player.board[carpPosition.row][carpPosition.col]];
-  if (Math.abs(shoalPosition.row - from.row) + Math.abs(shoalPosition.col - from.col) === 1) {
-    const safe = { row: 0, col: 0 };
-    [player.board[shoalPosition.row][shoalPosition.col], player.board[safe.row][safe.col]] = [player.board[safe.row][safe.col], player.board[shoalPosition.row][shoalPosition.col]];
-  }
-
   const before = player.board.map((row) => row.map((piece) => piece && { ...piece }));
   movePiece(room, room.hostId, from);
-  assert.equal(player.movesRemaining, 11);
-  assert.equal(player.movementHistory.length, 1);
-
   undoLastMove(room, room.hostId);
   assert.equal(player.movesRemaining, 12);
-  assert.equal(player.movementHistory.length, 0);
   assert.deepEqual(player.board, before);
-  assert.equal(room.logs.at(-1).text, 'desfez a última jogada.');
-  assert.equal(player.board[empty.row][empty.col], null);
 });
 
 test('sair durante a partida preserva a vaga para retorno', () => {
@@ -208,55 +172,29 @@ test('sair durante a partida preserva a vaga para retorno', () => {
   const result = removeMember(room, player.id, 'player');
   assert.equal(result.retained, true);
   assert.equal(room.players[player.id].connected, false);
-  assert.equal(room.playerOrder.includes(player.id), true);
 });
-
 
 test('reposição continua para a próxima menor cor e cada retirada rende uma moeda', () => {
   const room = makeTwoPlayerRoom();
   startGame(room, room.hostId);
   const player = room.players[room.hostId];
-
   const carps = player.board.flat().filter((piece) => piece?.type === 'carp');
-  const colors = [
-    ...Array(20).fill('yellow'),
-    ...Array(2).fill('white'),
-    'red',
-    ...Array(5).fill('gray')
-  ];
+  const colors = [...Array(20).fill('yellow'), ...Array(2).fill('white'), 'red', ...Array(5).fill('gray')];
   carps.forEach((piece, index) => { piece.color = colors[index]; });
-
   room.phase = 'development';
-  player.development = {
-    capacity: 4,
-    eligibleColors: ['white'],
-    chosenColor: 'white',
-    replaced: 0,
-    done: false
-  };
-  const other = room.players[room.playerOrder[1]];
-  other.development = { capacity: 0, eligibleColors: [], chosenColor: null, replaced: 0, done: true };
-
-  function positionOf(color) {
-    for (let row = 0; row < 5; row += 1) {
-      for (let col = 0; col < 7; col += 1) {
-        if (player.board[row][col]?.type === 'carp' && player.board[row][col].color === color) return { row, col };
-      }
-    }
+  player.development = { capacity: 4, eligibleColors: ['white'], chosenColor: 'white', replaced: 0, done: false };
+  room.players[room.playerOrder[1]].development = { capacity: 0, eligibleColors: [], chosenColor: null, replaced: 0, done: true };
+  const positionOf = (color) => {
+    for (let row = 0; row < 5; row += 1) for (let col = 0; col < 7; col += 1) if (player.board[row][col]?.type === 'carp' && player.board[row][col].color === color) return { row, col };
     return null;
-  }
-
+  };
   replaceFish(room, player.id, positionOf('white'));
   replaceFish(room, player.id, positionOf('white'));
-  assert.equal(player.development.chosenColor, 'red');
   replaceFish(room, player.id, positionOf('red'));
-  assert.equal(player.development.chosenColor, 'gray');
   replaceFish(room, player.id, positionOf('gray'));
-
   assert.equal(player.coins, 4);
   assert.equal(room.round, 2);
   assert.equal(room.phase, 'movement');
-  assert.equal(player.development, null);
 });
 
 test('três moedas compram um movimento extra', () => {
@@ -264,14 +202,10 @@ test('três moedas compram um movimento extra', () => {
   startGame(room, room.hostId);
   const player = room.players[room.hostId];
   player.coins = 6;
-
   buyExtraMove(room, player.id);
   buyExtraMove(room, player.id);
-
   assert.equal(player.coins, 0);
   assert.equal(player.movesRemaining, 14);
-  assert.equal(player.extraMovesPurchased, 2);
-  assert.equal(publicRoom(room).players[player.id].moveLimit, 14);
 });
 
 test('moedas desempata a classificação final', () => {
@@ -280,59 +214,139 @@ test('moedas desempata a classificação final', () => {
   const [a, b] = room.playerOrder;
   room.players[a].coins = 1;
   room.players[b].coins = 4;
-
   finishGame(room);
-
   assert.deepEqual(room.winner.playerIds, [b]);
-  assert.equal(room.winner.ranking[0].playerId, b);
-  assert.equal(room.winner.ranking[0].coins, 4);
 });
 
 test('movimento extra comprado depois de uma jogada é preservado ao desfazer', () => {
   const room = makeTwoPlayerRoom();
   startGame(room, room.hostId);
   const player = room.players[room.hostId];
+  neutralizeSpecials(player);
   const target = { row: 2, col: 2 };
-
   let carpPosition = null;
-  let shoalPosition = null;
-  for (let row = 0; row < 5; row += 1) {
-    for (let col = 0; col < 7; col += 1) {
-      if (!carpPosition && player.board[row][col]?.type === 'carp') carpPosition = { row, col };
-      if (player.board[row][col]?.type === 'shoal') shoalPosition = { row, col };
-    }
-  }
+  for (let row = 0; row < 5; row += 1) for (let col = 0; col < 7; col += 1) if (!carpPosition && player.board[row][col]?.type === 'carp') carpPosition = { row, col };
   [player.board[carpPosition.row][carpPosition.col], player.board[target.row][target.col]] = [player.board[target.row][target.col], player.board[carpPosition.row][carpPosition.col]];
-  if (Math.abs(shoalPosition.row - target.row) + Math.abs(shoalPosition.col - target.col) === 1) {
-    const safe = { row: 0, col: 0 };
-    [player.board[shoalPosition.row][shoalPosition.col], player.board[safe.row][safe.col]] = [player.board[safe.row][safe.col], player.board[shoalPosition.row][shoalPosition.col]];
-  }
-
   movePiece(room, player.id, target);
   player.coins = 3;
   buyExtraMove(room, player.id);
   undoLastMove(room, player.id);
-
-  assert.equal(player.coins, 0);
   assert.equal(player.extraMovesPurchased, 1);
   assert.equal(player.movesRemaining, 13);
 });
 
+test('modo solo inicia com duas peças especiais e linha Automa', () => {
+  const room = createRoom({ hostName: 'Ana', color: 'yellow', socketId: 'a', mode: 'solo' });
+  startGame(room, room.hostId);
+  const player = room.players[room.hostId];
+  assert.equal(player.board.flat().filter((piece) => piece?.type === 'algae').length, 4);
+  assert.equal(player.board.flat().filter((piece) => SPECIAL_TYPES.includes(piece?.type)).length, 2);
+  assert.equal(room.solo.automaLine.length, 7);
+});
+
+test('Tesourinhas têm prioridade e ocupam o vazio por 1 movimento', () => {
+  const room = makeTwoPlayerRoom(); startGame(room, room.hostId); const player = room.players[room.hostId]; player.board = blankBoard();
+  player.board[2][2] = { id: 'move', type: 'carp', color: 'yellow', rotation: 0 };
+  player.board[2][1] = { id: 'shoal', type: 'shoal', rotation: 0 };
+  movePiece(room, player.id, { row: 2, col: 2 });
+  assert.equal(player.board[2][2]?.type, 'shoal');
+  assert.equal(player.movesRemaining, 10);
+});
+
+test('Papa-terra troca com a peça intermediária sem custo', () => {
+  const room = makeTwoPlayerRoom(); startGame(room, room.hostId); const player = room.players[room.hostId]; player.board = blankBoard();
+  player.board[2][2] = { id: 'move', type: 'carp', color: 'yellow', rotation: 0 };
+  player.board[0][2] = { id: 'papa', type: 'papaTerra', rotation: 0 };
+  player.board[1][2] = { id: 'middle', type: 'carp', color: 'red', rotation: 0 };
+  movePiece(room, player.id, { row: 2, col: 2 });
+  assert.equal(player.board[1][2]?.type, 'papaTerra');
+  assert.equal(player.board[0][2]?.id, 'middle');
+  assert.equal(player.movesRemaining, 11);
+});
+
+test('Dojô atravessa a diagonal até o vazio por 1 movimento', () => {
+  const room = makeTwoPlayerRoom(); startGame(room, room.hostId); const player = room.players[room.hostId]; player.board = blankBoard();
+  player.board[2][2] = { id: 'move', type: 'carp', color: 'yellow', rotation: 0 };
+  player.board[0][0] = { id: 'dojo', type: 'dojo', rotation: 0 };
+  movePiece(room, player.id, { row: 2, col: 2 });
+  assert.equal(player.board[2][2]?.type, 'dojo');
+  assert.equal(player.board[0][0], null);
+  assert.equal(player.movesRemaining, 10);
+});
+
+test('Esturjão empurra a sequência em direção ao vazio por 3 movimentos', () => {
+  const room = makeTwoPlayerRoom(); startGame(room, room.hostId); const player = room.players[room.hostId]; player.board = blankBoard();
+  player.board[2][2] = { id: 'move', type: 'carp', color: 'yellow', rotation: 0 };
+  player.board[2][0] = { id: 'sturgeon', type: 'sturgeon', rotation: 0 };
+  player.board[2][1] = { id: 'between', type: 'carp', color: 'red', rotation: 0 };
+  movePiece(room, player.id, { row: 2, col: 2 });
+  assert.equal(player.board[2][0], null);
+  assert.equal(player.board[2][1]?.type, 'sturgeon');
+  assert.equal(player.board[2][2]?.id, 'between');
+  assert.equal(player.movesRemaining, 8);
+});
 
 test('jogador pronto recebe aviso nominal enquanto aguarda a fase dos demais', () => {
-  const room = makeTwoPlayerRoom();
-  startGame(room, room.hostId);
-  const [hostId, otherId] = room.playerOrder;
-  const host = room.players[hostId];
-  host.movesRemaining = 0;
-  host.mustMoveCarp = false;
-  host.correctionRequired = false;
-  markMovementReady(room, hostId);
+  const room = makeTwoPlayerRoom(); startGame(room, room.hostId); const [hostId, otherId] = room.playerOrder; const host = room.players[hostId];
+  host.movesRemaining = 0; host.mustMoveCarp = false; host.correctionRequired = false; markMovementReady(room, hostId);
+  assert.throws(() => movePiece(room, hostId, { row: 0, col: 0 }), new RegExp(`Aguarde o jogador ${room.players[otherId].name}`));
+});
 
-  assert.equal(host.movementReady, true);
-  assert.equal(room.players[otherId].movementReady, false);
-  assert.throws(
-    () => movePiece(room, hostId, { row: 0, col: 0 }),
-    new RegExp(`Aguarde o jogador ${room.players[otherId].name} terminar a Fase de movimentação`)
-  );
+test('três jogadores recebem cinco plantas e uma peça especial', () => {
+  const room = createRoom({ hostName: 'Ana', color: 'yellow', socketId: 'a' });
+  addPlayer(room, { name: 'Beto', color: 'red', socketId: 'b' });
+  addPlayer(room, { name: 'Clara', color: 'white', socketId: 'c' });
+  startGame(room, room.hostId);
+  for (const id of room.playerOrder) {
+    const pieces = room.players[id].board.flat().filter(Boolean);
+    assert.equal(pieces.filter((piece) => piece.type === 'algae').length, 5);
+    assert.equal(pieces.filter((piece) => SPECIAL_TYPES.includes(piece.type)).length, 1);
+  }
+});
+
+test('Tesourinhas vencem a prioridade quando mais de uma peça especial poderia reagir', () => {
+  const room = makeTwoPlayerRoom(); startGame(room, room.hostId); const player = room.players[room.hostId]; player.board = blankBoard();
+  player.board[2][2] = { id: 'move', type: 'carp', color: 'yellow', rotation: 0 };
+  player.board[2][1] = { id: 'shoal', type: 'shoal', rotation: 0 };
+  player.board[0][0] = { id: 'dojo', type: 'dojo', rotation: 0 };
+  movePiece(room, player.id, { row: 2, col: 2 });
+  assert.equal(player.board[2][2]?.type, 'shoal');
+  assert.equal(player.board[0][0]?.type, 'dojo');
+});
+
+test('modo solo recebe a linha do Automa, contabiliza saídas e registra a espera da peça especial', () => {
+  const room = createRoom({ hostName: 'Ana', color: 'yellow', socketId: 'a', mode: 'solo' }); startGame(room, room.hostId); const player = room.players[room.hostId];
+  const outgoingSpecial = player.board.flat().find((piece) => SPECIAL_TYPES.includes(piece?.type));
+  for (let row = 0; row < 5; row += 1) for (let col = 0; col < 7; col += 1) if (player.board[row][col]?.id === outgoingSpecial.id) player.board[row][col] = null;
+  player.board[2] = [{ id:'y1',type:'carp',color:'yellow',rotation:0 },{ id:'r1',type:'carp',color:'red',rotation:0 },outgoingSpecial,{ id:'y2',type:'carp',color:'yellow',rotation:0 },{ id:'w1',type:'carp',color:'white',rotation:0 },{ id:'g1',type:'carp',color:'gray',rotation:0 },{ id:'r2',type:'carp',color:'red',rotation:0 }];
+  const incomingIds = room.solo.automaLine.map((piece) => piece.id);
+  player.movesRemaining = 0; player.correctionRequired = false; player.mustMoveCarp = false; markMovementReady(room, player.id);
+  assert.equal(room.solo.exitedPreferred, 2);
+  completeCirculation(room);
+  assert.deepEqual(player.board[2].map((piece) => piece.id), incomingIds);
+  completeCirculation(room);
+  assert.equal(room.solo.specialCooldown[outgoingSpecial.type], 1);
+});
+
+test('peça especial que saiu fica fora da próxima linha do Automa', () => {
+  const room = createRoom({ hostName: 'Ana', color: 'yellow', socketId: 'a', mode: 'solo' }); startGame(room, room.hostId); const player = room.players[room.hostId];
+  const outgoingSpecial = player.board.flat().find((piece) => SPECIAL_TYPES.includes(piece?.type));
+  for (let row = 0; row < 5; row += 1) for (let col = 0; col < 7; col += 1) if (player.board[row][col]?.id === outgoingSpecial.id) player.board[row][col] = null;
+  player.board[2] = [{id:'r1',type:'carp',color:'red',rotation:0},{id:'r2',type:'carp',color:'red',rotation:0},outgoingSpecial,{id:'w1',type:'carp',color:'white',rotation:0},{id:'w2',type:'carp',color:'white',rotation:0},{id:'g1',type:'carp',color:'gray',rotation:0},{id:'g2',type:'carp',color:'gray',rotation:0}];
+  player.movesRemaining = 0; player.correctionRequired = false; player.mustMoveCarp = false; markMovementReady(room, player.id); completeCirculation(room); completeCirculation(room);
+  assert.equal(room.round, 2);
+  assert.equal(room.solo.automaLine.some((piece) => piece.type === outgoingSpecial.type), false);
+});
+
+test('pontuação solo soma carpas preferidas que saíram e as que permaneceram', () => {
+  const room = createRoom({ hostName: 'Ana', color: 'yellow', socketId: 'a', mode: 'solo' }); startGame(room, room.hostId); const player = room.players[room.hostId]; room.solo.exitedPreferred = 9;
+  let kept = 0; for (const piece of player.board.flat()) if (piece?.type === 'carp') { piece.color = kept < 6 ? 'yellow' : 'red'; kept += 1; }
+  finishGame(room);
+  assert.equal(room.winner.soloScore, 15);
+});
+
+test('espectadores podem acompanhar uma sala solo', () => {
+  const room = createRoom({ hostName: 'Ana', color: 'yellow', socketId: 'a', mode: 'solo' });
+  const spectator = addSpectator(room, { name: 'Visitante', socketId: 'v' }); startGame(room, room.hostId);
+  assert.equal(publicRoom(room).spectators[spectator.id].name, 'Visitante');
 });

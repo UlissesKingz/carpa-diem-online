@@ -1679,3 +1679,114 @@ body[data-layout="mobile"] .mobile-phase-confirm-slot {
   display: block;
   width: 100%;
 }
+
+/* --- MVP 7: modo solo e peças especiais --- */
+.role-switch.three-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.role-switch.three-tabs .role-tab { min-width: 0; padding-inline: 8px; font-size: .76rem; }
+
+.piece-sturgeon,
+.piece-dojo,
+.piece-papaTerra {
+  width: 84%;
+  height: 68%;
+}
+.piece-dojo { width: 82%; height: 82%; }
+.piece-papaTerra { width: 88%; height: 72%; }
+.piece-shoal { width: 92%; height: 72%; }
+.piece-shell-sturgeon,
+.piece-shell-dojo,
+.piece-shell-papaTerra {
+  filter: drop-shadow(10px 12px 5px rgba(0, 0, 0, .58));
+}
+
+.animate-special {
+  animation: specialSlide .62s cubic-bezier(.18,.72,.22,1) both;
+  z-index: 8;
+}
+.animate-special-dojo { animation-name: dojoDive; animation-duration: .82s; }
+.animate-special-sturgeon { animation-duration: .72s; }
+.animate-special-papaTerra { animation-duration: .58s; }
+@keyframes specialSlide {
+  from { transform: translate(calc(var(--move-x) * 100%), calc(var(--move-y) * 100%)); }
+  to { transform: translate(0, 0); }
+}
+@keyframes dojoDive {
+  0% { transform: translate(calc(var(--move-x) * 100%), calc(var(--move-y) * 100%)) scale(.9); opacity: .3; filter: blur(2px); }
+  45% { opacity: .12; transform: translate(calc(var(--move-x) * 50%), calc(var(--move-y) * 50%)) scale(.72); }
+  100% { transform: translate(0, 0) scale(1); opacity: 1; filter: blur(0); }
+}
+
+.special-action-alert {
+  margin: 12px 0 0 !important;
+  padding: 10px 11px;
+  border: 1px solid rgba(241, 201, 92, .3);
+  border-radius: 11px;
+  color: #f9e7a9 !important;
+  background: rgba(152, 119, 25, .14);
+  font-size: .78rem;
+  font-weight: 850;
+  line-height: 1.4;
+  animation: alertIn .28s ease-out;
+}
+
+.automa-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 11px 13px;
+  border: 1px solid rgba(102, 214, 202, .22);
+  border-radius: 15px;
+  background: linear-gradient(145deg, rgba(23, 48, 54, .72), rgba(9, 19, 26, .86));
+}
+.automa-card p { margin: 0 0 2px; }
+.automa-card > div:first-child strong { color: var(--text); font-size: .82rem; }
+.automa-line {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 11px;
+  background: url('/assets/tank-water.png') center / cover;
+}
+.automa-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  aspect-ratio: 1;
+  border-right: 1px solid rgba(255,255,255,.055);
+}
+.automa-cell:last-child { border-right: 0; }
+.automa-cell .piece-shell { width: 94%; height: 94%; }
+.automa-cell .piece-art { max-width: 100%; max-height: 100%; }
+
+.solo-score-panel { margin-top: 14px; }
+.solo-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .8rem;
+}
+.solo-score-row:last-child { border-bottom: 0; }
+.solo-score-row strong { color: var(--teal); font-size: 1.4rem; }
+.solo-result-card { max-width: 650px; text-align: center; }
+.solo-final-score { display: grid; justify-items: center; margin: 22px 0 14px; }
+.solo-final-score strong { color: var(--teal); font-size: clamp(4rem, 12vw, 7rem); line-height: .85; }
+.solo-final-score span { margin-top: 8px; color: var(--text); font-weight: 900; }
+.solo-record { padding: 11px 13px; border: 1px solid rgba(102,214,202,.25); border-radius: 12px; background: rgba(102,214,202,.07); }
+.print-suggestion { color: var(--warning) !important; font-weight: 800; }
+
+@media (max-width: 720px) {
+  .role-switch.three-tabs { gap: 3px; padding: 4px; }
+  .role-switch.three-tabs .role-tab { padding-inline: 4px; font-size: .62rem; }
+  .automa-card { grid-template-columns: 1fr; gap: 7px; padding: 9px; }
+  .automa-card > div:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .automa-line { width: 100%; }
+  .special-action-alert { font-size: .64rem; padding: 8px 9px; }
+}

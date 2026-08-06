@@ -9,6 +9,10 @@ const MOVES_PER_ROUND = 12;
 const CIRCULATION_DURATION_MS = 5200;
 const EXTRA_MOVE_COST = 3;
 const COLORS = ['yellow', 'white', 'red', 'gray'];
+const SPECIAL_TYPES = ['shoal', 'sturgeon', 'dojo', 'papaTerra'];
+const SPECIAL_PRIORITY = ['shoal', 'papaTerra', 'dojo', 'sturgeon'];
+const SPECIAL_COSTS = { shoal: 1, papaTerra: 0, dojo: 1, sturgeon: 3 };
+const SPECIAL_LABELS = { shoal: 'Tesourinhas', papaTerra: 'Papa-terra', dojo: 'Dojô', sturgeon: 'Esturjão' };
 
 function randomId(bytes = 8) {
   return crypto.randomBytes(bytes).toString('hex');
@@ -39,13 +43,17 @@ function createPiece(type, color = null) {
   };
 }
 
-function createInitialBoard() {
+function createInitialBoard(playerCount = 2, mode = 'multiplayer') {
   const pieces = [];
   for (const color of COLORS) {
     for (let i = 0; i < 7; i += 1) pieces.push(createPiece('carp', color));
   }
-  for (let i = 0; i < 5; i += 1) pieces.push(createPiece('algae'));
-  pieces.push(createPiece('shoal'));
+
+  const isTwoOrSolo = mode === 'solo' || playerCount === 2;
+  const algaeCount = isTwoOrSolo ? 4 : 5;
+  const specialCount = isTwoOrSolo ? 2 : 1;
+  for (let i = 0; i < algaeCount; i += 1) pieces.push(createPiece('algae'));
+  shuffle(SPECIAL_TYPES).slice(0, specialCount).forEach((type) => pieces.push(createPiece(type)));
 
   const shuffled = shuffle(pieces);
   const board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
@@ -75,7 +83,8 @@ function snapshotMovementState(player) {
     correctionRequired: player.correctionRequired,
     movementReady: player.movementReady,
     lastMovedPieceId: player.lastMovedPieceId,
-    extraMovesPurchased: player.extraMovesPurchased
+    extraMovesPurchased: player.extraMovesPurchased,
+    specialAlert: player.specialAlert || ''
   };
 }
 
@@ -87,6 +96,7 @@ function restoreMovementState(player, snapshot) {
   player.correctionRequired = player.movesRemaining > 0 ? false : snapshot.correctionRequired;
   player.movementReady = snapshot.movementReady;
   player.lastMovedPieceId = snapshot.lastMovedPieceId;
+  player.specialAlert = snapshot.specialAlert || '';
 }
 
 function findEmpty(board) {
@@ -123,7 +133,7 @@ function shortestRotationTarget(fromRotation, canonicalTarget) {
 
 function orientPieceForMovement(piece, from, to) {
   const fromRotation = Number(piece?.rotation || 0);
-  if (!piece || !['carp', 'shoal'].includes(piece.type)) {
+  if (!piece || !['carp', ...SPECIAL_TYPES].includes(piece.type)) {
     return { fromRotation, toRotation: fromRotation, oriented: false };
   }
   const canonicalTarget = rotationForMovement(from, to);
@@ -134,7 +144,7 @@ function orientPieceForMovement(piece, from, to) {
 
 function orientPieceForCurrent(piece) {
   const fromRotation = Number(piece?.rotation || 0);
-  if (!piece || !['carp', 'shoal'].includes(piece.type)) return null;
+  if (!piece || !['carp', ...SPECIAL_TYPES].includes(piece.type)) return null;
   const toRotation = shortestRotationTarget(fromRotation, 90);
   piece.rotation = 90;
   return { fromRotation, toRotation, oriented: true };
@@ -149,8 +159,141 @@ function adjacentPositions(position) {
   ].filter(({ row, col }) => isInside(row, col));
 }
 
-function adjacentShoal(board, emptyPosition) {
-  return adjacentPositions(emptyPosition).find(({ row, col }) => board[row][col]?.type === 'shoal') || null;
+function pieceName(piece) {
+  if (!piece) return 'peça';
+  if (piece.type === 'carp') return `carpa ${labelColor(piece.color)}`;
+  if (piece.type === 'algae') return 'planta';
+  return SPECIAL_LABELS[piece.type] || 'peça especial';
+}
+
+function findPiecePosition(board, type) {
+  for (let row = 0; row < ROWS; row += 1) {
+    for (let col = 0; col < COLS; col += 1) {
+      if (board[row][col]?.type === type) return { row, col };
+    }
+  }
+  return null;
+}
+
+function sameDiagonal(a, b) {
+  const rowDistance = Math.abs(a.row - b.row);
+  const colDistance = Math.abs(a.col - b.col);
+  return rowDistance > 0 && rowDistance === colDistance;
+}
+
+function sameOrthogonalLine(a, b) {
+  return (a.row === b.row || a.col === b.col) && !(a.row === b.row && a.col === b.col);
+}
+
+function detectSpecialTrigger(board, emptyPosition) {
+  for (const type of SPECIAL_PRIORITY) {
+    const position = findPiecePosition(board, type);
+    if (!position) continue;
+
+    if (type === 'shoal' && isOrthogonallyAdjacent(position, emptyPosition)) {
+      return { type, position, empty: { ...emptyPosition }, cost: SPECIAL_COSTS[type] };
+    }
+
+    if (type === 'papaTerra') {
+      const rowDelta = emptyPosition.row - position.row;
+      const colDelta = emptyPosition.col - position.col;
+      const distance = Math.abs(rowDelta) + Math.abs(colDelta);
+      if (distance === 2 && (rowDelta === 0 || colDelta === 0)) {
+        const between = { row: position.row + Math.sign(rowDelta), col: position.col + Math.sign(colDelta) };
+        if (board[between.row][between.col]) return { type, position, between, empty: { ...emptyPosition }, cost: 0 };
+      }
+    }
+
+    if (type === 'dojo' && sameDiagonal(position, emptyPosition)) {
+      return { type, position, empty: { ...emptyPosition }, cost: SPECIAL_COSTS[type] };
+    }
+
+    if (type === 'sturgeon' && sameOrthogonalLine(position, emptyPosition)) {
+      return { type, position, empty: { ...emptyPosition }, cost: SPECIAL_COSTS[type] };
+    }
+  }
+  return null;
+}
+
+function applySpecialTrigger(board, trigger) {
+  if (!trigger) return null;
+  const piece = board[trigger.position.row][trigger.position.col];
+  const moves = [];
+  let affectedCount = 0;
+
+  if (trigger.type === 'shoal' || trigger.type === 'dojo') {
+    const orientation = orientPieceForMovement(piece, trigger.position, trigger.empty);
+    board[trigger.empty.row][trigger.empty.col] = piece;
+    board[trigger.position.row][trigger.position.col] = null;
+    moves.push({ pieceId: piece.id, from: { ...trigger.position }, to: { ...trigger.empty }, ...orientation });
+  }
+
+  if (trigger.type === 'papaTerra') {
+    const middlePiece = board[trigger.between.row][trigger.between.col];
+    const papaOrientation = orientPieceForMovement(piece, trigger.position, trigger.between);
+    const middleOrientation = orientPieceForMovement(middlePiece, trigger.between, trigger.position);
+    board[trigger.position.row][trigger.position.col] = middlePiece;
+    board[trigger.between.row][trigger.between.col] = piece;
+    moves.push({ pieceId: piece.id, from: { ...trigger.position }, to: { ...trigger.between }, ...papaOrientation });
+    moves.push({ pieceId: middlePiece.id, from: { ...trigger.between }, to: { ...trigger.position }, ...middleOrientation });
+    affectedCount = 1;
+  }
+
+  if (trigger.type === 'sturgeon') {
+    const rowStep = Math.sign(trigger.empty.row - trigger.position.row);
+    const colStep = Math.sign(trigger.empty.col - trigger.position.col);
+    let cursor = { ...trigger.empty };
+    while (!(cursor.row === trigger.position.row && cursor.col === trigger.position.col)) {
+      const previous = { row: cursor.row - rowStep, col: cursor.col - colStep };
+      const movedPiece = board[previous.row][previous.col];
+      if (movedPiece) {
+        const orientation = orientPieceForMovement(movedPiece, previous, cursor);
+        board[cursor.row][cursor.col] = movedPiece;
+        moves.push({ pieceId: movedPiece.id, from: previous, to: { ...cursor }, ...orientation });
+        if (movedPiece.id !== piece.id) affectedCount += 1;
+      }
+      cursor = previous;
+    }
+    board[trigger.position.row][trigger.position.col] = null;
+  }
+
+  const messages = {
+    shoal: 'Tesourinhas ocuparam o espaço vazio e consumiram 1 movimento.',
+    dojo: 'Dojô atravessou o tanque pela diagonal e consumiu 1 movimento.',
+    papaTerra: `Papa-terra trocou de posição com ${pieceName(board[trigger.position.row][trigger.position.col])}. Nenhum movimento foi consumido.`,
+    sturgeon: `Esturjão empurrou ${affectedCount} peça(s) e consumiu 3 movimentos.`
+  };
+  return {
+    type: trigger.type,
+    pieceId: piece.id,
+    label: SPECIAL_LABELS[trigger.type],
+    cost: trigger.cost,
+    moves,
+    affectedCount,
+    message: messages[trigger.type]
+  };
+}
+
+function specialTypesOnBoard(board) {
+  return new Set(board.flat().filter(Boolean).map((piece) => piece.type).filter((type) => SPECIAL_TYPES.includes(type)));
+}
+
+function generateAutomaLine(room, player) {
+  const cooldown = room.solo.specialCooldown;
+  const unavailable = specialTypesOnBoard(player.board);
+  const pool = [];
+  for (const color of COLORS) {
+    for (let i = 0; i < 7; i += 1) pool.push({ type: 'carp', color });
+  }
+  for (let i = 0; i < 4; i += 1) pool.push({ type: 'algae' });
+  for (const type of SPECIAL_TYPES) {
+    if (!unavailable.has(type) && Number(cooldown[type] || 0) <= 0) pool.push({ type });
+  }
+
+  const selected = shuffle(pool).slice(0, COLS).map((definition) => createPiece(definition.type, definition.color || null));
+  room.solo.automaLine = selected;
+  for (const type of SPECIAL_TYPES) cooldown[type] = Math.max(0, Number(cooldown[type] || 0) - 1);
+  return selected;
 }
 
 function countCarps(board) {
@@ -255,6 +398,7 @@ function createPlayer({ name, color, socketId }) {
     development: null,
     coins: 0,
     extraMovesPurchased: 0,
+    specialAlert: '',
     discard: Object.fromEntries(COLORS.map((item) => [item, 0]))
   };
 }
@@ -269,10 +413,11 @@ function createSpectator({ name, socketId }) {
   };
 }
 
-function createRoom({ hostName, color, socketId }) {
+function createRoom({ hostName, color, socketId, mode = 'multiplayer' }) {
   const host = createPlayer({ name: hostName, color, socketId });
   const room = {
     code: roomCode(),
+    mode: mode === 'solo' ? 'solo' : 'multiplayer',
     status: 'lobby',
     phase: 'lobby',
     round: 0,
@@ -291,13 +436,15 @@ function createRoom({ hostName, color, socketId }) {
     matchId: null,
     startedAt: null,
     finishedAt: null,
-    restartCount: 0
+    restartCount: 0,
+    solo: null
   };
   addLog(room, 'criou a sala.', host.id);
   return room;
 }
 
 function addPlayer(room, { name, color, socketId }) {
+  if (room.mode === 'solo') throw new Error('Esta sala está no modo solo. Entre como espectador.');
   if (room.status !== 'lobby') throw new Error('A partida já começou. Entre como espectador.');
   if (room.playerOrder.length >= 4) throw new Error('A sala está cheia.');
   const normalizedName = String(name || '').trim().toLocaleLowerCase('pt-BR');
@@ -346,8 +493,8 @@ function removeMember(room, memberId, role) {
   return { roomEmpty: room.playerOrder.length === 0, retained: false };
 }
 
-function resetPlayerForRound(player, initializeBoard = false) {
-  if (initializeBoard) player.board = createInitialBoard();
+function resetPlayerForRound(player, initializeBoard = false, setup = {}) {
+  if (initializeBoard) player.board = createInitialBoard(setup.playerCount || 2, setup.mode || 'multiplayer');
   player.movesRemaining = MOVES_PER_ROUND;
   player.mustMoveCarp = false;
   player.correctionRequired = false;
@@ -357,6 +504,7 @@ function resetPlayerForRound(player, initializeBoard = false) {
   player.pendingDevelopmentCapacity = 0;
   player.development = null;
   player.extraMovesPurchased = 0;
+  player.specialAlert = '';
 }
 
 function initializeMatch(room, restarted = false) {
@@ -370,12 +518,18 @@ function initializeMatch(room, restarted = false) {
   room.startedAt = Date.now();
   room.finishedAt = null;
   if (restarted) room.restartCount += 1;
+  room.solo = room.mode === 'solo' ? {
+    exitedPreferred: 0,
+    automaLine: null,
+    specialCooldown: Object.fromEntries(SPECIAL_TYPES.map((type) => [type, 0]))
+  } : null;
   for (const id of room.playerOrder) {
     const player = room.players[id];
     player.discard = Object.fromEntries(COLORS.map((item) => [item, 0]));
     player.coins = 0;
-    resetPlayerForRound(player, true);
+    resetPlayerForRound(player, true, { playerCount: room.playerOrder.length, mode: room.mode });
   }
+  if (room.mode === 'solo') generateAutomaLine(room, room.players[room.playerOrder[0]]);
   setAction(room, { type: restarted ? 'restartComplete' : 'gameStart' });
   addLog(room, restarted ? 'A partida foi reiniciada por acordo dos jogadores.' : 'A partida começou.');
 }
@@ -383,18 +537,22 @@ function initializeMatch(room, restarted = false) {
 function startGame(room, requesterId) {
   if (room.hostId !== requesterId) throw new Error('Somente o anfitrião pode iniciar.');
   if (room.status !== 'lobby') throw new Error('A partida já começou.');
-  if (room.playerOrder.length < 2) throw new Error('São necessários pelo menos 2 jogadores.');
+  if (room.mode === 'solo' ? room.playerOrder.length !== 1 : room.playerOrder.length < 2) throw new Error(room.mode === 'solo' ? 'O modo solo deve ter exatamente 1 jogador.' : 'São necessários pelo menos 2 jogadores.');
   if (!allPlayersConnected(room)) throw new Error('Aguarde todos os jogadores retornarem antes de iniciar.');
   initializeMatch(room, false);
 }
 
 function restartGame(room) {
-  if (room.playerOrder.length < 2) throw new Error('São necessários pelo menos 2 jogadores.');
+  if (room.mode !== 'solo' && room.playerOrder.length < 2) throw new Error('São necessários pelo menos 2 jogadores.');
   initializeMatch(room, true);
 }
 
 function requestRestart(room, requesterId) {
   assertPlayersPresent(room);
+  if (room.mode === 'solo') {
+    restartGame(room);
+    return { restarted: true };
+  }
   if (!['playing', 'finished'].includes(room.status)) throw new Error('A partida ainda não começou.');
   if (!room.players[requesterId]) throw new Error('Somente jogadores podem solicitar reinício.');
   if (room.restartVote) throw new Error('Já existe uma votação de reinício em andamento.');
@@ -432,10 +590,6 @@ function respondRestart(room, playerId, accept) {
   return { restarted: false, rejected: false };
 }
 
-function projectedShoalTrigger(board, from) {
-  return Boolean(adjacentShoal(board, from));
-}
-
 function movePiece(room, playerId, from) {
   assertPlayersPresent(room);
   if (room.phase !== 'movement') throw new Error('Não é a fase de movimentação.');
@@ -459,59 +613,46 @@ function movePiece(room, playerId, from) {
     board[from.row][from.col] = null;
     player.correctionRequired = false;
     player.lastMovedPieceId = piece.id;
-    setAction(room, {
-      type: 'correctionMove',
-      playerId,
-      from: { ...from },
-      to: { ...empty },
-      pieceId: piece.id,
-      ...orientation
-    });
+    player.specialAlert = '';
+    setAction(room, { type: 'correctionMove', playerId, from: { ...from }, to: { ...empty }, pieceId: piece.id, ...orientation });
     addLog(room, 'retirou o vazio da linha central.', playerId);
-    return { correction: true, shoalMoved: false };
+    return { correction: true, specialMoved: false };
   }
 
   if (player.movesRemaining <= 0) throw new Error('Seus movimentos disponíveis terminaram. Compre um movimento extra ou conclua a fase.');
-  if (piece.type === 'shoal') throw new Error('O cardume se move apenas quando invade o espaço vazio.');
+  if (SPECIAL_TYPES.includes(piece.type)) throw new Error('As peças especiais se movimentam automaticamente quando o espaço vazio ativa sua ação.');
   if (player.mustMoveCarp && piece.type !== 'carp') throw new Error('Depois de uma alga, você deve mover uma carpa.');
 
-  const triggersShoal = projectedShoalTrigger(board, from);
+  const projected = cloneBoard(board);
+  projected[empty.row][empty.col] = clonePiece(piece);
+  projected[from.row][from.col] = null;
+  const specialTrigger = detectSpecialTrigger(projected, from);
   const createsCarpObligation = piece.type === 'algae';
   const pieceMoveCost = createsCarpObligation ? 0 : 1;
-  const currentCost = pieceMoveCost + (triggersShoal ? 1 : 0);
+  const specialCost = Number(specialTrigger?.cost || 0);
+  const currentCost = pieceMoveCost + specialCost;
   const futureRequired = createsCarpObligation ? 1 : 0;
   if (player.movesRemaining < currentCost + futureRequired) {
     throw new Error('Não há movimentos suficientes para completar essa ação e suas obrigações.');
   }
 
   player.movementHistory.push(snapshotMovementState(player));
+  player.specialAlert = '';
   const fulfillsCarpObligation = player.mustMoveCarp && piece.type === 'carp';
   const orientation = orientPieceForMovement(piece, from, empty);
   board[empty.row][empty.col] = piece;
   board[from.row][from.col] = null;
   player.movesRemaining -= pieceMoveCost;
-
   if (fulfillsCarpObligation) player.mustMoveCarp = false;
   if (createsCarpObligation) player.mustMoveCarp = true;
 
-  let shoalMoved = false;
-  let shoalAnimation = null;
-  const newEmpty = findEmpty(board);
-  const shoalPosition = adjacentShoal(board, newEmpty);
-  if (shoalPosition) {
-    const shoal = board[shoalPosition.row][shoalPosition.col];
-    const shoalOrientation = orientPieceForMovement(shoal, shoalPosition, newEmpty);
-    board[newEmpty.row][newEmpty.col] = shoal;
-    board[shoalPosition.row][shoalPosition.col] = null;
-    player.movesRemaining -= 1;
-    shoalMoved = true;
-    shoalAnimation = {
-      from: { ...shoalPosition },
-      to: { ...newEmpty },
-      pieceId: shoal.id,
-      ...shoalOrientation
-    };
-    addLog(room, 'teve o espaço invadido pelo cardume.', playerId);
+  let specialAction = null;
+  const trigger = detectSpecialTrigger(board, findEmpty(board));
+  if (trigger) {
+    specialAction = applySpecialTrigger(board, trigger);
+    player.movesRemaining -= specialAction.cost;
+    player.specialAlert = specialAction.message;
+    addLog(room, specialAction.message, playerId);
   }
 
   if (player.movesRemaining === 0) {
@@ -519,7 +660,7 @@ function movePiece(room, playerId, from) {
     player.correctionRequired = finalEmpty.row === MIDDLE_ROW;
   }
 
-  player.lastMovedPieceId = shoalAnimation?.pieceId || piece.id;
+  player.lastMovedPieceId = specialAction?.pieceId || piece.id;
   setAction(room, {
     type: 'move',
     playerId,
@@ -527,15 +668,15 @@ function movePiece(room, playerId, from) {
     to: { ...empty },
     pieceId: piece.id,
     ...orientation,
-    shoal: shoalAnimation
+    special: specialAction
   });
   const moveLimit = MOVES_PER_ROUND + player.extraMovesPurchased;
-  if (createsCarpObligation && !shoalMoved) {
+  if (createsCarpObligation && !specialAction) {
     addLog(room, 'moveu uma alga sem gastar movimento; agora deve mover uma carpa.', playerId);
-  } else {
+  } else if (!specialAction) {
     addLog(room, `realizou o movimento ${moveLimit - player.movesRemaining}/${moveLimit}.`, playerId);
   }
-  return { correction: false, shoalMoved };
+  return { correction: false, specialMoved: Boolean(specialAction), specialType: specialAction?.type || null };
 }
 
 function undoLastMove(room, playerId) {
@@ -727,6 +868,7 @@ function finishDevelopmentAndAdvance(room) {
   room.round += 1;
   room.phase = 'movement';
   for (const id of room.playerOrder) resetPlayerForRound(room.players[id], false);
+  if (room.mode === 'solo') generateAutomaLine(room, room.players[room.playerOrder[0]]);
   setAction(room, { type: 'phaseChange', phase: 'movement', round: room.round });
   addLog(room, `Rodada ${room.round} iniciada.`);
 }
@@ -737,25 +879,42 @@ function beginCirculation(room) {
   const outgoing = {};
   const routes = [];
   const turns = {};
-  for (let index = 0; index < room.playerOrder.length; index += 1) {
-    const senderId = room.playerOrder[index];
-    const receiverId = room.playerOrder[(index + 1) % room.playerOrder.length];
-    const sender = room.players[senderId];
-    sender.lastMovedPieceId = null;
-    sender.board[MIDDLE_ROW].forEach((piece) => {
+
+  if (room.mode === 'solo') {
+    const playerId = room.playerOrder[0];
+    const player = room.players[playerId];
+    player.lastMovedPieceId = null;
+    player.board[MIDDLE_ROW].forEach((piece) => {
       const turn = orientPieceForCurrent(piece);
       if (turn) turns[piece.id] = turn;
+      if (piece?.type === 'carp' && piece.color === player.color) room.solo.exitedPreferred += 1;
+      if (piece && SPECIAL_TYPES.includes(piece.type)) room.solo.specialCooldown[piece.type] = 1;
     });
-    outgoing[senderId] = sender.board[MIDDLE_ROW].map(clonePiece);
-    routes.push({ senderId, receiverId });
+    outgoing[playerId] = player.board[MIDDLE_ROW].map(clonePiece);
+    routes.push({ senderId: playerId, receiverId: 'automa' });
+  } else {
+    for (let index = 0; index < room.playerOrder.length; index += 1) {
+      const senderId = room.playerOrder[index];
+      const receiverId = room.playerOrder[(index + 1) % room.playerOrder.length];
+      const sender = room.players[senderId];
+      sender.lastMovedPieceId = null;
+      sender.board[MIDDLE_ROW].forEach((piece) => {
+        const turn = orientPieceForCurrent(piece);
+        if (turn) turns[piece.id] = turn;
+      });
+      outgoing[senderId] = sender.board[MIDDLE_ROW].map(clonePiece);
+      routes.push({ senderId, receiverId });
+    }
   }
+
   room.circulation = {
     id: randomId(6),
     startedAt: Date.now(),
     stage: 'outgoing',
     durationMs: Math.ceil(CIRCULATION_DURATION_MS / 2),
     outgoing,
-    routes
+    routes,
+    incomingAutoma: room.mode === 'solo' ? room.solo.automaLine.map(clonePiece) : null
   };
   setAction(room, { type: 'circulationStart', routes, turns });
   addLog(room, 'Começou a Fase da Correnteza.');
@@ -765,15 +924,20 @@ function completeCirculation(room) {
   if (room.phase !== 'circulation' || !room.circulation) return false;
 
   if (room.circulation.stage === 'outgoing') {
-    const { outgoing, routes } = room.circulation;
-    for (const { senderId, receiverId } of routes) {
-      room.players[receiverId].board[MIDDLE_ROW] = outgoing[senderId].map(clonePiece);
+    const { outgoing, routes, incomingAutoma } = room.circulation;
+    if (room.mode === 'solo') {
+      const playerId = room.playerOrder[0];
+      room.players[playerId].board[MIDDLE_ROW] = incomingAutoma.map(clonePiece);
+    } else {
+      for (const { senderId, receiverId } of routes) {
+        room.players[receiverId].board[MIDDLE_ROW] = outgoing[senderId].map(clonePiece);
+      }
     }
     room.circulation.stage = 'incoming';
     room.circulation.startedAt = Date.now();
     room.circulation.durationMs = Math.floor(CIRCULATION_DURATION_MS / 2);
     setAction(room, { type: 'circulationComplete', routes });
-    addLog(room, 'As linhas centrais entraram nos novos tanques mantendo a ordem das peças.');
+    addLog(room, room.mode === 'solo' ? 'A linha do Automa entrou no tanque mantendo a ordem das peças.' : 'As linhas centrais entraram nos novos tanques mantendo a ordem das peças.');
     return true;
   }
 
@@ -797,6 +961,25 @@ function finishGame(room) {
   room.status = 'finished';
   room.phase = 'finished';
   room.finishedAt = Date.now();
+  if (room.mode === 'solo') {
+    const playerId = room.playerOrder[0];
+    const player = room.players[playerId];
+    const remainingPreferred = countCarps(player.board)[player.color];
+    const exitedPreferred = Number(room.solo?.exitedPreferred || 0);
+    const soloScore = exitedPreferred + remainingPreferred;
+    room.winner = {
+      solo: true,
+      playerIds: [playerId],
+      score: soloScore,
+      soloScore,
+      exitedPreferred,
+      remainingPreferred,
+      ranking: [{ playerId, color: player.color, score: soloScore, coins: player.coins }]
+    };
+    setAction(room, { type: 'gameFinished', playerIds: [playerId], score: soloScore, solo: true });
+    addLog(room, `A partida solo terminou com ${soloScore} carpas preferidas no recorde.`);
+    return;
+  }
   const result = calculateScores(room);
   const ranking = room.playerOrder
     .map((id) => ({
@@ -843,7 +1026,8 @@ function publicRoom(room) {
       coins: player.coins,
       extraMovesPurchased: player.extraMovesPurchased,
       moveLimit: MOVES_PER_ROUND + player.extraMovesPurchased,
-      discard: player.discard
+      discard: player.discard,
+      specialAlert: player.specialAlert || ''
     };
   }
 
@@ -858,6 +1042,7 @@ function publicRoom(room) {
 
   return {
     code: room.code,
+    mode: room.mode || 'multiplayer',
     status: room.status,
     phase: room.phase,
     round: room.round,
@@ -889,6 +1074,11 @@ function publicRoom(room) {
       routes: room.circulation.routes
     } : null,
     lastAction: room.lastAction,
+    solo: room.mode === 'solo' && room.solo ? {
+      exitedPreferred: room.solo.exitedPreferred,
+      automaLine: room.solo.automaLine,
+      specialCooldown: room.solo.specialCooldown
+    } : null,
     constants: {
       rows: ROWS,
       cols: COLS,
@@ -897,13 +1087,15 @@ function publicRoom(room) {
       maxRounds: MAX_ROUNDS,
       circulationDurationMs: CIRCULATION_DURATION_MS,
       extraMoveCost: EXTRA_MOVE_COST,
-      colors: COLORS
+      colors: COLORS,
+      specialTypes: SPECIAL_TYPES
     }
   };
 }
 
 module.exports = {
   COLORS,
+  SPECIAL_TYPES,
   createRoom,
   addPlayer,
   addSpectator,

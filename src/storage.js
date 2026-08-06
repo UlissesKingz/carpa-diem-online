@@ -164,6 +164,7 @@ function buildMatchRecord(room) {
     _id: room.matchId,
     matchId: room.matchId,
     roomCode: room.code,
+    mode: room.mode || 'multiplayer',
     sessionId: ensureAudit(room).sessionId,
     status: 'finished',
     startedAt: room.startedAt ? new Date(room.startedAt) : null,
@@ -178,6 +179,11 @@ function buildMatchRecord(room) {
     winningCoins: room.winner?.coins ?? null,
     finalScores: room.winner?.scores || {},
     byTank: room.winner?.byTank || {},
+    soloResult: room.mode === 'solo' ? {
+      score: room.winner?.soloScore ?? room.winner?.score ?? null,
+      exitedPreferred: room.winner?.exitedPreferred ?? room.solo?.exitedPreferred ?? 0,
+      remainingPreferred: room.winner?.remainingPreferred ?? null
+    } : null,
     finalBoards: Object.fromEntries(room.playerOrder.map((id) => [id, room.players[id]?.board || null])),
     logs: [...(room.logs || [])],
     createdAt: new Date()
