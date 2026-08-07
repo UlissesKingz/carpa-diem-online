@@ -1899,3 +1899,27 @@ body[data-layout="mobile"] .mobile-phase-confirm-slot {
   .opponents-strip { grid-template-columns: 1fr; }
   .opponent-card { min-width: 0; }
 }
+
+
+/* Ordem do resumo das peças: no desktop permanece abaixo do tanque; no mobile vem depois dos movimentos. */
+.piece-guide-slot {
+  grid-column: 2;
+  min-width: 0;
+  width: 100%;
+}
+.piece-guide-slot .piece-guide-card {
+  margin-top: 0;
+}
+
+@media (max-width: 720px) {
+  .game-shell .piece-guide-slot {
+    order: 4;
+    width: 100%;
+  }
+  .game-shell .left-rail > .population-panel {
+    order: 5;
+  }
+  .game-shell .right-rail > .log-panel {
+    order: 6;
+  }
+}

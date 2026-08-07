@@ -956,10 +956,10 @@
               </div>
             </header>
             ${boardHtml(current, { interactive: state.phase === 'movement' || state.phase === 'development' })}
-            ${pieceGuideHtml()}
           </section>
           ${mobilePhaseActionHtml(current)}
           <aside class="right-rail">${panel}${logPanelHtml()}</aside>
+          <div class="piece-guide-slot">${pieceGuideHtml()}</div>
         </main>
       </div>`;
 
