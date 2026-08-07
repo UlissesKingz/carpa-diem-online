@@ -287,6 +287,11 @@
     const SPECIAL_LABELS = { shoal: 'Tesourinhas', sturgeon: 'Esturjão', dojo: 'Dojô', papaTerra: 'Papa-terra' };
     const label = piece.type === 'carp' ? `Carpa ${COLOR_LABELS[piece.color]}` : piece.type === 'algae' ? 'Planta' : (SPECIAL_LABELS[piece.type] || 'Peça especial');
     const lastMoved = state?.phase === 'movement' && state?.players?.[playerId]?.lastMovedPieceId === piece.id;
+    const specialEffectMoved = state?.phase === 'movement'
+      && state?.lastAction?.type === 'move'
+      && state.lastAction.playerId === playerId
+      && state.lastAction.special?.moves?.some((move) => move.pieceId === piece.id && move.to?.row === row && move.to?.col === col);
+    const movementEmphasisClass = specialEffectMoved ? 'special-effect-moved-art' : (lastMoved ? 'last-moved-art' : '');
     const orientationStyle = animation.orientationStyle || `--piece-rotation:${rotation}deg;--start-rotation:${rotation}deg;`;
     return `
   <span
@@ -298,7 +303,7 @@
       style="${orientationStyle}"
     >
       <img
-        class="piece-art piece-${piece.type} ${lastMoved ? 'last-moved-art' : ''}"
+        class="piece-art piece-${piece.type} ${movementEmphasisClass}"
         src="${src}"
         alt=""
         title="${label}"
@@ -337,7 +342,7 @@
         <div class="tank-grid">${cells.join('')}</div>
         <div class="tank-frame-layer"></div>
         <span class="channel-marker left" aria-hidden="true">‹</span>
-        <span class="channel-marker right" aria-hidden="true">›</span>
+        <span class="channel-marker right" aria-hidden="true">‹</span>
       </div>`;
   }
 

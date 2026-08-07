@@ -1,6 +1,12 @@
 (() => {
   const DISCORD_URL = 'https://discord.gg/EJCHTwQjDz';
-  const COPYRIGHT_TEXT = 'Jogo criado por Ulisses Reis e Marcelo Torres © 2026 — Propriedade intelectual protegida. Reprodução, distribuição ou uso não autorizado são proibidos.';
+  const COPYRIGHT_TEXT = 'Jogo criado por Ulisses Reis © 2026 — Propriedade intelectual protegida. Reprodução, distribuição ou uso não autorizado são proibidos.';
+  const BACKGROUND_MUSIC_URL = 'https://res.cloudinary.com/dzjwlafsx/video/upload/v1786108152/background_sound_a0yqgp.mp3';
+  const MUSIC_ENABLED_KEY = 'carpasBackgroundMusicEnabled';
+  const MUSIC_TIME_KEY = 'carpasBackgroundMusicTime';
+  let backgroundMusic = null;
+  let musicButton = null;
+  let musicEnabled = localStorage.getItem(MUSIC_ENABLED_KEY) !== 'false';
 
   function ensureFooter() {
     if (document.querySelector('.copyright-footer')) return;
@@ -51,6 +57,69 @@
     document.body.appendChild(button);
   }
 
+  function updateMusicButton() {
+    if (!musicButton) return;
+    musicButton.setAttribute('aria-pressed', musicEnabled ? 'true' : 'false');
+    musicButton.setAttribute('aria-label', musicEnabled ? 'Desligar música de fundo' : 'Ligar música de fundo');
+    musicButton.textContent = musicEnabled ? '♫ Música' : '♫ Música off';
+  }
+
+  function persistMusicTime() {
+    if (!backgroundMusic || !Number.isFinite(backgroundMusic.currentTime)) return;
+    localStorage.setItem(MUSIC_TIME_KEY, String(backgroundMusic.currentTime));
+  }
+
+  async function tryPlayBackgroundMusic() {
+    if (!musicEnabled || !backgroundMusic) return;
+    try {
+      await backgroundMusic.play();
+    } catch {
+      // Navegadores bloqueiam autoplay com áudio até a primeira interação.
+    }
+  }
+
+  function ensureBackgroundMusic() {
+    if (!backgroundMusic) {
+      backgroundMusic = new Audio(BACKGROUND_MUSIC_URL);
+      backgroundMusic.loop = true;
+      backgroundMusic.preload = 'auto';
+      backgroundMusic.volume = 0.3;
+      const savedTime = Number(localStorage.getItem(MUSIC_TIME_KEY) || 0);
+      if (Number.isFinite(savedTime) && savedTime > 0) {
+        backgroundMusic.addEventListener('loadedmetadata', () => {
+          if (backgroundMusic.duration && savedTime < backgroundMusic.duration) backgroundMusic.currentTime = savedTime;
+        }, { once: true });
+      }
+      backgroundMusic.addEventListener('timeupdate', () => {
+        if (Math.floor(backgroundMusic.currentTime) % 3 === 0) persistMusicTime();
+      });
+    }
+
+    if (!musicButton) {
+      musicButton = document.createElement('button');
+      musicButton.type = 'button';
+      musicButton.className = 'music-toggle-fab';
+      musicButton.addEventListener('click', async () => {
+        musicEnabled = !musicEnabled;
+        localStorage.setItem(MUSIC_ENABLED_KEY, String(musicEnabled));
+        updateMusicButton();
+        if (musicEnabled) await tryPlayBackgroundMusic();
+        else {
+          persistMusicTime();
+          backgroundMusic.pause();
+        }
+      });
+      document.body.appendChild(musicButton);
+    }
+
+    updateMusicButton();
+    if (musicEnabled) tryPlayBackgroundMusic();
+  }
+
+  function unlockBackgroundMusic() {
+    if (musicEnabled) tryPlayBackgroundMusic();
+  }
+
   function forceDiscordLinks() {
     if (!window.CARPAS_CONFIG) window.CARPAS_CONFIG = {};
     window.CARPAS_CONFIG.discordUrl = DISCORD_URL;
@@ -63,6 +132,7 @@
   function initialize() {
     ensureFooter();
     ensureContactButton();
+    ensureBackgroundMusic();
     forceDiscordLinks();
   }
 
@@ -74,7 +144,10 @@
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closeContact();
+    unlockBackgroundMusic();
   });
+  document.addEventListener('pointerdown', unlockBackgroundMusic, { passive: true });
+  window.addEventListener('pagehide', persistMusicTime);
 
   // A interface principal é renderizada novamente durante a partida.
   const observer = new MutationObserver(forceDiscordLinks);

@@ -123,6 +123,20 @@
 .phase-card { display: grid; grid-template-columns: auto 1fr; gap: 14px; padding: 22px; border: 1px solid var(--line); border-radius: 20px; background: rgba(14, 25, 33, .82); }
 .phase-card h3 { margin: 2px 0 8px; }
 .phase-card p { margin: 0; color: #a7b9bf; line-height: 1.55; }
+.phase-animation {
+  grid-column: 1 / -1;
+  margin: 8px 0 0;
+  overflow: hidden;
+  border: 1px solid rgba(102,214,202,.13);
+  border-radius: 14px;
+  background: rgba(3,10,15,.48);
+}
+.phase-animation img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
 .phase-number { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; color: #06201e; background: var(--teal); font-weight: 950; }
 .phase-arrow { display: grid; place-items: center; color: var(--teal); font-size: 1.4rem; }
 
@@ -996,5 +1010,104 @@
   }
   .solo-score-formula {
     flex-direction: column;
+  }
+}
+
+/* Correção visual — peças do tanque de preparação sem deformação. */
+.hero-tank-shell > .manual-grid .manual-grid-cell img,
+.mini-tank-shell > .manual-grid .manual-grid-cell img {
+  width: auto;
+  height: auto;
+  max-width: 72%;
+  max-height: 72%;
+  object-fit: contain;
+}
+.hero-tank-shell > .manual-grid .manual-grid-cell.carp img,
+.mini-tank-shell > .manual-grid .manual-grid-cell.carp img {
+  width: auto;
+  height: auto;
+  max-width: 52%;
+  max-height: 80%;
+}
+.component-art img,
+.special-pieces-strip img {
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+.component-art img { max-width: 86%; max-height: 86%; }
+.special-pieces-strip img { max-width: 62px; max-height: 42px; }
+
+/* GIF fish-animation atrás do logo no cabeçalho do manual. */
+.manual-topbar {
+  position: sticky;
+  isolation: isolate;
+  overflow: hidden;
+}
+.manual-brand {
+  position: relative;
+  z-index: 2;
+}
+.manual-brand::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 420px;
+  height: 88px;
+  transform: translate(-50%, -50%);
+  background: url('/assets/fish-animation.gif') center / contain no-repeat;
+  opacity: .5;
+  pointer-events: none;
+}
+.manual-top-actions {
+  position: relative;
+  z-index: 3;
+}
+
+@media (max-width: 720px) {
+  .manual-brand::before {
+    width: 260px;
+    height: 70px;
+  }
+}
+
+/* Conceito visual do produto físico — fim do manual */
+.product-concept-section {
+  padding-bottom: clamp(34px, 6vw, 72px);
+}
+.product-concept-heading {
+  max-width: 850px;
+}
+.product-concept-card {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(8, 18, 24, .82);
+  box-shadow: 0 24px 56px rgba(0, 0, 0, .28);
+}
+.product-concept-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+}
+.product-concept-card figcaption {
+  padding: 14px 18px 16px;
+  color: var(--muted);
+  font-size: .78rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .product-concept-card {
+    border-radius: 17px;
+  }
+  .product-concept-card figcaption {
+    padding: 11px 13px 13px;
+    font-size: .68rem;
   }
 }

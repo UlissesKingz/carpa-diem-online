@@ -501,7 +501,8 @@ legend { margin-bottom: 10px; font-weight: 850; }
 }
 
 
-.last-moved-art { animation: lastMovedDrift 1.8s ease-in-out infinite; }
+.last-moved-art { animation: lastMovedDrift 1.45s ease-in-out infinite; }
+.special-effect-moved-art { animation: specialEffectDrift 1.15s ease-in-out infinite; }
 
 
 .tank.miniature { width: 100%; filter: drop-shadow(0 9px 12px rgba(0, 0, 0, .28)); }
@@ -586,8 +587,16 @@ legend { margin-bottom: 10px; font-weight: 850; }
   100% { opacity: 1; transform: translateX(0) scale(1); }
 }
 @keyframes lastMovedDrift {
-  0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
-  50% { transform: translateY(-4%) rotate(1.4deg) scale(1.018); }
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  25% { transform: translate3d(-3%, -6%, 0) rotate(-2.8deg) scale(1.035); }
+  50% { transform: translate3d(2%, -10%, 0) rotate(3.2deg) scale(1.05); }
+  75% { transform: translate3d(3%, -4%, 0) rotate(-1.8deg) scale(1.028); }
+}
+@keyframes specialEffectDrift {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  25% { transform: translate3d(-4%, -7%, 0) rotate(-3deg) scale(1.045); }
+  50% { transform: translate3d(4%, -11%, 0) rotate(3.5deg) scale(1.06); }
+  75% { transform: translate3d(2%, -5%, 0) rotate(-2deg) scale(1.035); }
 }
 @keyframes waterCaustics {
   0% { transform: translate3d(-1.5%, -1%, 0) scale(1.02) rotate(-.4deg); opacity: .10; }
@@ -1325,6 +1334,26 @@ body[data-layout="mobile"] .log-panel {
 }
 .contact-fab:hover { transform: translateY(-1px); border-color: rgba(102, 214, 202, .42); }
 
+.music-toggle-fab {
+  position: fixed;
+  left: 12px;
+  bottom: 24px;
+  z-index: 135;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid rgba(249, 224, 193, .23);
+  border-radius: 999px;
+  color: #F9E0C1;
+  background: rgba(8, 14, 20, .86);
+  box-shadow: 0 9px 24px rgba(0, 0, 0, .38);
+  cursor: pointer;
+  font-size: .7rem;
+  font-weight: 850;
+  backdrop-filter: blur(9px);
+}
+.music-toggle-fab:hover { transform: translateY(-1px); border-color: rgba(102, 214, 202, .42); }
+.music-toggle-fab[aria-pressed="false"] { color: rgba(249, 224, 193, .62); }
+
 .contact-backdrop {
   position: fixed;
   inset: 0;
@@ -1362,6 +1391,14 @@ body { padding-bottom: 24px; }
   }
   .contact-fab {
     right: 7px;
+    bottom: 20px;
+    min-height: 27px;
+    padding: 0 8px;
+    font-size: .62rem;
+  }
+
+  .music-toggle-fab {
+    left: 7px;
     bottom: 20px;
     min-height: 27px;
     padding: 0 8px;
