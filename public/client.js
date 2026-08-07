@@ -491,7 +491,7 @@
           ${logoHtml('initial-logo')}
           ${initialExternalActionsHtml()}
           <section class="entry-card">
-          <p class="eyebrow">Carpas Online · MVP 6</p>
+          <p class="eyebrow">Carpa Diem Online · MVP 6</p>
           <h1>Entre no ecossistema</h1>
           <p class="lead">${roleLead}</p>
           ${notice ? `<div class="notice error">${escapeHtml(notice)}</div>` : ''}
@@ -715,7 +715,7 @@
         <div class="movement-progress" style="--progress:${totalMoves ? (completed / totalMoves) * 100 : 0}%"><span></span></div>
         <div class="movement-dots" style="--moves-count:${totalMoves}">${dots}</div>
         <p class="instruction">${instruction}</p>
-        <div class="coin-rule-note"><img src="${ASSETS.coin}" alt=""><span><strong>${state.constants.extraMoveCost} moedas</strong> compram 1 movimento extra. As moedas gastas são abatidas.</span></div>
+        <div class="coin-rule-note"><img src="${ASSETS.coin}" alt=""><span><strong>${state.constants.extraMoveCost} moedas</strong> compram 1 movimento extra.</span></div>
         ${!isCompactMobile() && canFinish ? '<button id="finishMovement" class="primary-button">Concluir movimentação</button>' : ''}
         ${!isCompactMobile() && current.movementReady && waitingForOtherPlayersMessage() ? '<button class="secondary-button try-next-phase" data-wait-phase="movement">Continuar para a próxima fase</button>' : ''}
         ${current.specialAlert ? `<p class="special-action-alert" role="status">${escapeHtml(current.specialAlert)}</p>` : ''}
