@@ -1,6 +1,6 @@
 (() => {
   const DISCORD_URL = 'https://discord.gg/EJCHTwQjDz';
-  const COPYRIGHT_TEXT = 'Jogo criado por Ulisses Reis © 2026 — Propriedade intelectual protegida. Reprodução, distribuição ou uso não autorizado são proibidos.';
+  const COPYRIGHT_TEXT = 'Jogo criado por Ulisses Reis e Marcelo Torres © 2026 — Propriedade intelectual protegida. Reprodução, distribuição ou uso não autorizado são proibidos.';
   const BACKGROUND_MUSIC_URL = 'https://res.cloudinary.com/dzjwlafsx/video/upload/v1786108152/background_sound_a0yqgp.mp3';
   const MUSIC_ENABLED_KEY = 'carpasBackgroundMusicEnabled';
   const MUSIC_TIME_KEY = 'carpasBackgroundMusicTime';

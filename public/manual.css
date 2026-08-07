@@ -1054,8 +1054,8 @@
   z-index: -1;
   left: 50%;
   top: 50%;
-  width: 420px;
-  height: 88px;
+  width: 900px;
+  height: 189px;
   transform: translate(-50%, -50%);
   background: url('/assets/fish-animation.gif') center / contain no-repeat;
   opacity: .5;
