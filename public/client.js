@@ -703,6 +703,7 @@
     let instruction = 'Clique em uma peça ortogonalmente adjacente ao espaço vazio.';
     if (current.mustMoveCarp) instruction = 'A alga foi movida: agora mova obrigatoriamente uma carpa.';
     if (current.correctionRequired) instruction = 'Preencha o vazio da linha central usando a peça imediatamente acima ou abaixo, ou compre um movimento extra.';
+    if (current.movementDeadEnd) instruction = 'Você ficou sem movimento válido para completar o numero total e exato de 12 de movimentos. Clique em “Desfazer jogada” e escolha outro caminho.';
     if (current.movementReady) instruction = waitingForOtherPlayersMessage() || 'Movimentação concluída. Preparando a próxima fase.';
     const canFinish = current.movesRemaining === 0 && !current.mustMoveCarp && !current.correctionRequired && !current.movementReady;
     const dots = Array.from({ length: totalMoves }, (_, index) => `<i class="${index < completed ? 'done' : ''}"></i>`).join('');
@@ -718,7 +719,7 @@
         ${!isCompactMobile() && canFinish ? '<button id="finishMovement" class="primary-button">Concluir movimentação</button>' : ''}
         ${!isCompactMobile() && current.movementReady && waitingForOtherPlayersMessage() ? '<button class="secondary-button try-next-phase" data-wait-phase="movement">Continuar para a próxima fase</button>' : ''}
         ${current.specialAlert ? `<p class="special-action-alert" role="status">${escapeHtml(current.specialAlert)}</p>` : ''}
-        <p class="movement-alert ${movementError ? 'visible' : ''}" role="alert" aria-live="assertive">${movementError ? escapeHtml(movementError) : '&nbsp;'}</p>
+        ${current.movementDeadEnd ? '<p class="movement-alert visible" role="alert" aria-live="assertive">Você ficou sem movimento válido para completar o numero total e exato de 12 de movimentos. Clique em “Desfazer jogada” e escolha outro caminho.</p>' : `<p class="movement-alert ${movementError ? 'visible' : ''}" role="alert" aria-live="assertive">${movementError ? escapeHtml(movementError) : '&nbsp;'}</p>`}
       </section>`;
   }
 
