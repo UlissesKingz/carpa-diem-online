@@ -27,7 +27,11 @@ const PORT = process.env.PORT || 3000;
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: true, credentials: true }
+  cors: { origin: true, credentials: true },
+  // Dá mais tolerância a travamentos momentâneos do navegador/mobile antes de
+  // considerar a conexão perdida. O cliente continua reconectando automaticamente.
+  pingInterval: 25000,
+  pingTimeout: 60000
 });
 
 app.use(express.json());
@@ -367,6 +371,16 @@ function attachSocketToRoom(socket, room, member, role) {
   socket.data.memberRole = role;
 }
 
+function handoffMemberSocket(room, member, socket) {
+  const previousSocketId = member?.socketId;
+  if (previousSocketId && previousSocketId !== socket.id) {
+    const previousSocket = io.sockets.sockets.get(previousSocketId);
+    if (previousSocket) clearSocketRoom(previousSocket);
+  }
+  member.socketId = socket.id;
+  member.connected = true;
+}
+
 function clearSocketRoom(socket) {
   const code = socket.data.roomCode;
   if (code) socket.leave(code);
@@ -415,8 +429,7 @@ io.on('connection', (socket) => {
 
     const returningPlayer = Boolean(player);
     if (player) {
-      player.socketId = socket.id;
-      player.connected = true;
+      handoffMemberSocket(room, player, socket);
       if (!player.rankingPlayerId) player.rankingPlayerId = normalizeRankingPlayerId(payload.rankingPlayerId);
       resumeCirculation(room);
       room.logs.push({ at: Date.now(), text: 'voltou à partida.', actorId: player.id, actorRole: 'player' });
@@ -455,8 +468,7 @@ io.on('connection', (socket) => {
 
     const returningSpectator = Boolean(spectator);
     if (spectator) {
-      spectator.socketId = socket.id;
-      spectator.connected = true;
+      handoffMemberSocket(room, spectator, socket);
       room.logs.push({ at: Date.now(), text: 'se reconectou como espectador.', actorId: spectator.id, actorRole: 'spectator' });
     } else {
       spectator = addSpectator(room, { name: payload.name, socketId: socket.id });
@@ -596,6 +608,11 @@ io.on('connection', (socket) => {
 
     const member = role === 'spectator' ? room.spectators[memberId] : room.players[memberId];
     if (!member || !member.connected) return;
+
+    // Uma reconexão cria um novo socket. Se o transporte antigo fechar depois
+    // do retorno, ele não pode derrubar novamente o mesmo jogador.
+    if (member.socketId && member.socketId !== socket.id) return;
+
     member.connected = false;
     member.socketId = null;
     if (role === 'player') pauseCirculation(room);
