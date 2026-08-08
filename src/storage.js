@@ -11,6 +11,49 @@ let lastError = null;
 let serverInstanceId = null;
 const roomWriteQueues = new Map();
 
+const RANKING_MODES = ['solo', '2', '3', '4'];
+
+function rankingModeForRoom(room) {
+  if (room?.mode === 'solo') return 'solo';
+  const count = Number(room?.playerOrder?.length || 0);
+  return ['2', '3', '4'].includes(String(count)) ? String(count) : null;
+}
+
+function rankingLabel(mode) {
+  if (mode === 'solo') return 'Solo';
+  return `${mode} jogadores`;
+}
+
+function isBetterRankingResult(candidate, current) {
+  if (!current) return true;
+  if (candidate.score !== current.score) return candidate.score > current.score;
+  return candidate.coins > current.coins;
+}
+
+function rankingResultEntries(room) {
+  const ranking = room?.winner?.ranking || [];
+  return ranking.map((entry) => {
+    const player = room.players?.[entry.playerId];
+    return {
+      roomPlayerId: entry.playerId,
+      rankingPlayerId: player?.rankingPlayerId || `legacy-${room.matchId || room.code}-${entry.playerId}`,
+      nickname: String(player?.name || 'Jogador').trim().slice(0, 24) || 'Jogador',
+      score: Number(entry.score || 0),
+      coins: Number(entry.coins || 0)
+    };
+  });
+}
+
+function publicRankingRecord(record) {
+  if (!record) return null;
+  return {
+    nickname: record.nickname,
+    score: Number(record.score || 0),
+    coins: Number(record.coins || 0)
+  };
+}
+
+
 function enqueueRoomWrite(code, operation) {
   const previous = roomWriteQueues.get(code) || Promise.resolve();
   const next = previous.catch(() => {}).then(operation);
@@ -209,6 +252,7 @@ async function initialize() {
     const matches = database.collection('match_records');
     const roomSessions = database.collection('room_sessions');
     const serverEvents = database.collection('server_events');
+    const leaderboard = database.collection('leaderboard_records');
 
     await Promise.all([
       activeRooms.createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 }),
@@ -218,7 +262,8 @@ async function initialize() {
       roomSessions.createIndex({ openedAt: -1 }),
       roomSessions.createIndex({ roomCode: 1, openedAt: -1 }),
       roomSessions.createIndex({ status: 1, lastActivityAt: -1 }),
-      serverEvents.createIndex({ at: -1 })
+      serverEvents.createIndex({ at: -1 }),
+      leaderboard.createIndex({ mode: 1, score: -1, coins: -1, achievedAt: 1 })
     ]);
     return { enabled: true, dbName: database.databaseName };
   } catch (error) {
@@ -381,6 +426,109 @@ async function getMatch(matchId) {
   return database.collection('match_records').findOne({ _id: matchId });
 }
 
+
+async function rankingPosition(record, excludeId = null) {
+  if (!enabled || !database || !record) return null;
+  const collection = database.collection('leaderboard_records');
+  const query = {
+    mode: record.mode,
+    $or: [
+      { score: { $gt: record.score } },
+      { score: record.score, coins: { $gt: record.coins } },
+      { score: record.score, coins: record.coins, achievedAt: { $lt: record.achievedAt } },
+      { score: record.score, coins: record.coins, achievedAt: record.achievedAt, _id: { $lt: record._id } }
+    ]
+  };
+  if (excludeId) query._id = { $ne: excludeId };
+  const betterCount = await collection.countDocuments(query);
+  return betterCount + 1;
+}
+
+async function rankingLeader(mode) {
+  if (!enabled || !database || !RANKING_MODES.includes(mode)) return null;
+  const record = await database.collection('leaderboard_records')
+    .find({ mode })
+    .sort({ score: -1, coins: -1, achievedAt: 1, _id: 1 })
+    .limit(1)
+    .next();
+  return publicRankingRecord(record);
+}
+
+async function registerRankingResults(room) {
+  const mode = rankingModeForRoom(room);
+  if (!mode) return { available: false, mode: null, label: null, positions: {}, leader: null };
+  if (!enabled || !database) {
+    return { available: false, mode, label: rankingLabel(mode), positions: {}, leader: null };
+  }
+
+  const collection = database.collection('leaderboard_records');
+  const positions = {};
+
+  for (const entry of rankingResultEntries(room)) {
+    const now = new Date();
+    const documentId = `${mode}:${entry.rankingPlayerId}`;
+    const existing = await collection.findOne({ _id: documentId });
+    const candidate = {
+      _id: documentId,
+      mode,
+      score: entry.score,
+      coins: entry.coins,
+      achievedAt: now
+    };
+
+    if (isBetterRankingResult(candidate, existing)) {
+      const document = {
+        _id: documentId,
+        rankingPlayerId: entry.rankingPlayerId,
+        mode,
+        nickname: entry.nickname,
+        score: entry.score,
+        coins: entry.coins,
+        achievedAt: now,
+        createdAt: existing?.createdAt || now,
+        lastPlayedAt: now,
+        lastMatchId: room.matchId || null
+      };
+      await collection.replaceOne({ _id: documentId }, document, { upsert: true });
+    } else {
+      await collection.updateOne(
+        { _id: documentId },
+        {
+          $set: {
+            nickname: entry.nickname,
+            lastPlayedAt: now,
+            lastMatchId: room.matchId || null
+          }
+        }
+      );
+    }
+
+    // A coluna da tela final representa a colocação do resultado desta partida.
+    // O registro persistente continua guardando apenas o melhor resultado do jogador.
+    positions[entry.roomPlayerId] = await rankingPosition(candidate, documentId);
+  }
+
+  return {
+    available: true,
+    mode,
+    label: rankingLabel(mode),
+    positions,
+    leader: await rankingLeader(mode),
+    updatedAt: Date.now()
+  };
+}
+
+async function getRankingLeaders() {
+  const leaders = {};
+  for (const mode of RANKING_MODES) {
+    leaders[mode] = {
+      label: rankingLabel(mode),
+      leader: await rankingLeader(mode)
+    };
+  }
+  return { available: Boolean(enabled && database), leaders };
+}
+
 async function addServerEvent(type, message, extra = {}) {
   if (!enabled || !database) return;
   const at = extra.at instanceof Date ? extra.at : new Date(extra.at || Date.now());
@@ -473,6 +621,8 @@ module.exports = {
   archiveMatch,
   listMatches,
   getMatch,
+  registerRankingResults,
+  getRankingLeaders,
   registerServerStart,
   heartbeatServer,
   registerServerStop,

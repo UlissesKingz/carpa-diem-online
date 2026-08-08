@@ -3,6 +3,7 @@
   const app = document.querySelector('#app');
   const layout = document.body.dataset.layout || 'desktop';
   const config = window.CARPAS_CONFIG || {};
+  const RANKING_PLAYER_ID_KEY = 'carpaDiemRankingPlayerId';
 
   const COLORS = ['yellow', 'white', 'red', 'gray'];
   const COLOR_LABELS = { yellow: 'Amarela', white: 'Branca', red: 'Vermelha', gray: 'Cinza' };
@@ -51,12 +52,35 @@
   let clearEntryAfterExit = false;
   let lastAnimatedActionId = null;
   let animateCurrentAction = false;
-  let interactionLockedUntil = 0;
   let serverConnected = socket.connected;
   let reconnectingToRoom = false;
+  const rankingPlayerId = loadOrCreateRankingPlayerId();
+  let rankingLeadersOpen = false;
+  let rankingLeadersLoading = false;
+  let rankingLeadersData = null;
+  let rankingLeadersError = '';
 
   function isCompactMobile() {
     return layout === 'mobile' || window.matchMedia('(max-width: 720px)').matches;
+  }
+
+
+  function loadOrCreateRankingPlayerId() {
+    let stored = String(localStorage.getItem(RANKING_PLAYER_ID_KEY) || '').trim();
+    if (/^[A-Za-z0-9_-]{12,96}$/.test(stored)) return stored;
+
+    if (window.crypto?.randomUUID) {
+      stored = window.crypto.randomUUID();
+    } else if (window.crypto?.getRandomValues) {
+      const bytes = new Uint8Array(18);
+      window.crypto.getRandomValues(bytes);
+      stored = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+    } else {
+      stored = `player-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
+    }
+
+    localStorage.setItem(RANKING_PLAYER_ID_KEY, stored);
+    return stored;
   }
 
   function loadIdentity() {
@@ -159,7 +183,7 @@
     const event = identity.role === 'spectator' ? 'joinSpectator' : 'joinRoom';
     const payload = identity.role === 'spectator'
       ? { roomCode: identity.roomCode, spectatorToken: identity.memberToken, name: identity.name }
-      : { roomCode: identity.roomCode, playerToken: identity.memberToken, name: identity.name, color: identity.color };
+      : { roomCode: identity.roomCode, playerToken: identity.memberToken, name: identity.name, color: identity.color, rankingPlayerId };
     const response = await emit(event, payload, { silent: true });
     if (!response?.ok) {
       reconnectingToRoom = false;
@@ -209,6 +233,7 @@
   function pieceAnimation(playerId, row, col, piece) {
     const emptyAnimation = { shellClass: '', shellStyle: '', orientationClass: '', orientationStyle: '' };
     if (!animateCurrentAction || !state?.lastAction || !piece) return emptyAnimation;
+    if (isCompactMobile() && identity.role === 'player' && playerId !== identity.memberId) return emptyAnimation;
     const action = state.lastAction;
 
     if ((action.type === 'move' || action.type === 'correctionMove') && action.playerId === playerId) {
@@ -366,7 +391,56 @@
   }
 
   function initialExternalActionsHtml() {
-    return `<nav class="initial-external-actions" aria-label="Links do jogo">${externalButton('Manual', 'manual', '▤')}${externalButton('Discord', 'discord', '◉')}</nav>`;
+    return `<nav class="initial-external-actions" aria-label="Links do jogo">${externalButton('Manual', 'manual', '▤')}${externalButton('Discord', 'discord', '◉')}<button class="top-action ranking-leaders-button" type="button"><span aria-hidden="true">★</span>Maior pontuador</button></nav>`;
+  }
+
+  function rankingLeadersModalHtml() {
+    if (!rankingLeadersOpen) return '';
+    const modes = ['solo', '2', '3', '4'];
+    const content = rankingLeadersLoading
+      ? '<p class="ranking-leaders-loading">Carregando os maiores pontuadores...</p>'
+      : rankingLeadersError
+        ? `<p class="notice error">${escapeHtml(rankingLeadersError)}</p>`
+        : rankingLeadersData?.available === false
+          ? '<p class="ranking-leaders-loading">Ranking temporariamente indisponível.</p>'
+          : `<div class="ranking-leaders-grid">${modes.map((mode) => {
+            const item = rankingLeadersData?.leaders?.[mode];
+            const leader = item?.leader;
+            return `<article class="ranking-leader-mode">
+              <p class="eyebrow">${escapeHtml(item?.label || (mode === 'solo' ? 'Solo' : `${mode} jogadores`))}</p>
+              ${leader
+                ? `<strong>${escapeHtml(leader.nickname)}</strong><span>${leader.score} carpas · ${leader.coins} moeda${leader.coins === 1 ? '' : 's'}</span>`
+                : '<strong>Sem recorde</strong><span>Ainda não há resultado registrado.</span>'}
+            </article>`;
+          }).join('')}</div>`;
+
+    return `<div class="modal-backdrop ranking-leaders-backdrop"><section class="modal-card ranking-leaders-card"><p class="eyebrow">Ranking Geral</p><h2>Maiores pontuadores</h2>${content}<button class="secondary-button close-ranking-leaders" type="button">Voltar</button></section></div>`;
+  }
+
+  async function openRankingLeaders() {
+    rankingLeadersOpen = true;
+    rankingLeadersLoading = true;
+    rankingLeadersError = '';
+    render();
+    try {
+      const response = await fetch('/api/ranking/leaders', { headers: { Accept: 'application/json' } });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Não foi possível carregar o ranking.');
+      rankingLeadersData = data;
+    } catch (error) {
+      rankingLeadersError = error.message || 'Não foi possível carregar o ranking.';
+    } finally {
+      rankingLeadersLoading = false;
+      render();
+    }
+  }
+
+  function bindRankingLeaders() {
+    document.querySelector('.ranking-leaders-button')?.addEventListener('click', openRankingLeaders);
+    document.querySelector('.close-ranking-leaders')?.addEventListener('click', () => {
+      rankingLeadersOpen = false;
+      render();
+    });
   }
 
   function bindExternalLinks() {
@@ -445,7 +519,7 @@
             'A fase de Venda e reposição começa depois da Correnteza.'
           ];
     }
-    if (state.mode === 'solo') return ['Some as carpas preferidas que saíram pela Correnteza às que ficaram no tanque.', 'Esse total é o seu resultado solo.', 'Tente superar o recorde salvo neste navegador.'];
+    if (state.mode === 'solo') return ['Some as carpas preferidas que saíram pela Correnteza às que ficaram no tanque.', 'Esse total é o seu resultado solo.', 'Sua colocação entra no Ranking Geral — Solo.'];
     return ['Conte todas as carpas de cada cor nos tanques.', 'A maior pontuação vence.', 'Em empate de carpas, vence quem tiver mais moedas.'];
   }
 
@@ -507,9 +581,11 @@
           </section>
         </div>
         ${serverConnectionUiHtml()}
+        ${rankingLeadersModalHtml()}
       </main>`;
 
     bindExternalLinks();
+    bindRankingLeaders();
 
     document.querySelectorAll('.role-tab').forEach((button) => {
       button.addEventListener('click', () => {
@@ -524,7 +600,7 @@
       const color = document.querySelector('input[name="color"]:checked')?.value;
       if (!name) { notice = 'Digite seu nome.'; return render(); }
       const mode = entryRole === 'solo' ? 'solo' : 'multiplayer';
-      const response = await emit('createRoom', { name, color, mode });
+      const response = await emit('createRoom', { name, color, mode, rankingPlayerId });
       if (response?.ok) {
         saveIdentity({ name, color, ...response, roomMode: mode === 'solo' ? 'solo' : (response.roomMode || mode) });
         render();
@@ -541,7 +617,7 @@
         return;
       }
       const color = document.querySelector('input[name="color"]:checked')?.value;
-      const response = await emit('joinRoom', { name, color, roomCode });
+      const response = await emit('joinRoom', { name, color, roomCode, rankingPlayerId });
       if (response?.ok) { saveIdentity({ name, color, ...response }); render(); }
     });
   }
@@ -572,9 +648,11 @@
           </section>
         </div>
         ${serverConnectionUiHtml()}
+        ${rankingLeadersModalHtml()}
       </main>`;
 
     bindExternalLinks();
+    bindRankingLeaders();
 
     document.querySelector('#backToEntry').addEventListener('click', async () => {
       const response = await emit('leaveRoom');
@@ -669,10 +747,10 @@
     const items = [
       { key: 'yellow', name: 'Carpa', text: 'Move 1 casa para o vazio.' },
       { key: 'algae', name: 'Planta', text: 'Não gasta movimento; depois dela, mova uma carpa.' },
-      { key: 'shoal', name: 'Tesourinhas', text: 'Invadem o vazio ao lado e gastam 1 movimento.' },
-      { key: 'sturgeon', name: 'Esturjão', text: 'Empurra a fileira ou coluna até o vazio. Custa 3.' },
-      { key: 'dojo', name: 'Dojô', text: 'Vai pela diagonal até o vazio. Custa 1.' },
-      { key: 'papaTerra', name: 'Papa-terra', text: 'Troca com a peça entre ele e o vazio. É grátis.' }
+      { key: 'shoal', name: 'Tesourinhas', text: 'Pode mover manualmente ao vazio por 1. Ao ativar, invade o vazio adjacente por 1.' },
+      { key: 'sturgeon', name: 'Esturjão', text: 'Pode mover manualmente ao vazio por 1. Ao ativar, empurra linha/coluna por 3.' },
+      { key: 'dojo', name: 'Dojô', text: 'Pode mover manualmente ao vazio por 1. Ao ativar, atravessa a diagonal por 1.' },
+      { key: 'papaTerra', name: 'Papa-terra', text: 'Pode mover manualmente ao vazio por 1. Sua troca automática continua grátis.' }
     ];
     return `<section class="piece-guide-card">
       <div class="piece-guide-header"><p class="eyebrow">Resumo das peças</p><strong>Como cada peça se comporta</strong></div>
@@ -700,7 +778,7 @@
   function movementPanel(current) {
     const totalMoves = current.moveLimit || state.constants.movesPerRound;
     const completed = Math.max(0, totalMoves - current.movesRemaining);
-    let instruction = 'Clique em uma peça ortogonalmente adjacente ao espaço vazio.';
+    let instruction = 'Clique em uma peça ortogonalmente adjacente ao espaço vazio. Peças especiais também podem ser movidas manualmente por 1 movimento.';
     if (current.mustMoveCarp) instruction = 'A alga foi movida: agora mova obrigatoriamente uma carpa.';
     if (current.correctionRequired) instruction = 'Preencha o vazio da linha central usando a peça imediatamente acima ou abaixo, ou compre um movimento extra.';
     if (current.movementDeadEnd) instruction = 'Você ficou sem movimento válido para completar o numero total e exato de 12 de movimentos. Clique em “Desfazer jogada” e escolha outro caminho.';
@@ -715,7 +793,7 @@
         <div class="movement-progress" style="--progress:${totalMoves ? (completed / totalMoves) * 100 : 0}%"><span></span></div>
         <div class="movement-dots" style="--moves-count:${totalMoves}">${dots}</div>
         <p class="instruction">${instruction}</p>
-        <div class="coin-rule-note"><img src="${ASSETS.coin}" alt=""><span><strong>${state.constants.extraMoveCost} moedas</strong> compram 1 movimento extra.</span></div>
+        <div class="coin-rule-note"><img src="${ASSETS.coin}" alt=""><span><strong>${state.constants.extraMoveCost} moedas</strong> compram 1 movimento extra. As moedas gastas são abatidas.</span></div>
         ${!isCompactMobile() && canFinish ? '<button id="finishMovement" class="primary-button">Concluir movimentação</button>' : ''}
         ${!isCompactMobile() && current.movementReady && waitingForOtherPlayersMessage() ? '<button class="secondary-button try-next-phase" data-wait-phase="movement">Continuar para a próxima fase</button>' : ''}
         ${current.specialAlert ? `<p class="special-action-alert" role="status">${escapeHtml(current.specialAlert)}</p>` : ''}
@@ -760,17 +838,49 @@
     return `<section class="action-panel circulation-panel"><p class="phase-kicker">Fase da Correnteza</p><h2>As peças seguem a correnteza</h2><div class="flow-graphic"><span>◀</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><p>${description}</p></section>`;
   }
 
+
+  function rankingModeLabel() {
+    if (state?.rankingGeneral?.label) return state.rankingGeneral.label;
+    if (state?.mode === 'solo') return 'Solo';
+    return `${state?.playerOrder?.length || 0} jogadores`;
+  }
+
+  function rankingPositionText(playerId) {
+    if (!state?.rankingGeneral) return 'Calculando...';
+    if (!state.rankingGeneral.available) return 'Indisponível';
+    const position = Number(state.rankingGeneral.positions?.[playerId] || 0);
+    return position > 0 ? `${position}º` : '—';
+  }
+
+  function generalRankingLeaderHtml() {
+    const ranking = state?.rankingGeneral;
+    const label = rankingModeLabel();
+    if (!ranking) {
+      return `<div class="general-ranking-leader pending"><p class="eyebrow">1º lugar — Ranking Geral — ${escapeHtml(label)}</p><strong>Calculando ranking...</strong></div>`;
+    }
+    if (!ranking.available) {
+      return `<div class="general-ranking-leader pending"><p class="eyebrow">Ranking Geral — ${escapeHtml(label)}</p><strong>Ranking temporariamente indisponível</strong></div>`;
+    }
+    const leader = ranking.leader;
+    if (!leader) {
+      return `<div class="general-ranking-leader"><p class="eyebrow">1º lugar — Ranking Geral — ${escapeHtml(label)}</p><strong>Aguardando o primeiro resultado</strong></div>`;
+    }
+    return `<div class="general-ranking-leader">
+      <p class="eyebrow">1º lugar — Ranking Geral — ${escapeHtml(label)}</p>
+      <strong>${escapeHtml(leader.nickname)}</strong>
+      <span>${leader.score} carpas · ${leader.coins} moeda${leader.coins === 1 ? '' : 's'}</span>
+    </div>`;
+  }
+
   function scorePanel() {
     if (!state.winner) return '';
     if (state.winner.solo) {
       const player = state.players[state.winner.playerIds[0]];
       const score = Number(state.winner.soloScore || state.winner.score || 0);
-      const recordKey = `carpasSoloRecord:${player.color}`;
-      const previousRecord = Number(localStorage.getItem(recordKey) || 0);
-      const record = Math.max(previousRecord, score);
-      localStorage.setItem(recordKey, String(record));
-      return `<div class="modal-backdrop final-results-backdrop"><section class="result-card final-results-card solo-result-card">${logoHtml('result-logo')}<p class="eyebrow">Resultado do modo solo</p><h1>Parabéns, ${escapeHtml(player.name)}!</h1><div class="solo-final-score"><strong>${score}</strong><span>carpas preferidas</span></div><p>${state.winner.exitedPreferred} saíram pela Correnteza e ${state.winner.remainingPreferred} permaneceram no tanque.</p><p class="solo-record">Seu recorde salvo neste navegador: <strong>${record}</strong></p><p class="print-suggestion">Tire um print do resultado e compartilhe seu recorde.</p><div class="final-result-actions"><button id="finalRestartGame" class="primary-button">↻ Reiniciar partida</button><button id="finalExitGame" class="secondary-button">Sair</button></div></section></div>`;
+      const coins = Number(player.coins || 0);
+      return `<div class="modal-backdrop final-results-backdrop"><section class="result-card final-results-card solo-result-card">${logoHtml('result-logo')}<p class="eyebrow">Resultado do modo solo</p><h1>Parabéns, ${escapeHtml(player.name)}!</h1><div class="solo-final-score"><strong>${score}</strong><span>carpas preferidas</span></div><div class="solo-result-coins"><img src="${ASSETS.coin}" alt=""><strong>${coins}</strong><span>moeda${coins === 1 ? '' : 's'}</span></div><p>${state.winner.exitedPreferred} saíram pela Correnteza e ${state.winner.remainingPreferred} permaneceram no tanque.</p><div class="solo-general-ranking"><span>Ranking Geral — ${escapeHtml(rankingModeLabel())}</span><strong>${rankingPositionText(player.id)}</strong></div>${generalRankingLeaderHtml()}<p class="print-suggestion">Tire um print do resultado e compartilhe seu recorde.</p><div class="final-result-actions"><button id="finalRestartGame" class="primary-button">↻ Reiniciar partida</button><button id="finalExitGame" class="secondary-button">Sair</button></div></section></div>`;
     }
+
     const rankingSource = state.winner.ranking || state.playerOrder.map((id) => ({
       playerId: id,
       score: state.winner.scores[state.players[id].color],
@@ -780,7 +890,9 @@
     const winnerNames = state.winner.playerIds.map((id) => state.players[id].name).join(' e ');
     const title = state.winner.playerIds.length > 1 ? `Empate entre ${escapeHtml(winnerNames)}!` : `${escapeHtml(winnerNames)} venceu!`;
     const restartButton = identity.role === 'player' ? '<button id="finalRestartGame" class="primary-button">↻ Reiniciar partida</button>' : '';
-    return `<div class="modal-backdrop final-results-backdrop"><section class="result-card final-results-card">${logoHtml('result-logo')}<p class="eyebrow">Resultado final</p><h1>${title}</h1><p class="result-rule">Primeiro conta-se o total de carpas. Em empate, vence quem tiver mais moedas.</p><div class="ranking">${ranking.map(({ player, score, coins }, index) => `<div class="${index === 0 ? 'winner-row' : ''}"><strong>${index + 1}º</strong>${playerNameChip(player)}${colorBadge(player.color)}<span>${score} carpas</span><span class="ranking-coins"><img src="${ASSETS.coin}" alt="">${coins}</span></div>`).join('')}</div><div class="final-result-actions">${restartButton}<button id="finalExitGame" class="secondary-button">Sair</button></div></section></div>`;
+    const rankingLabel = `Ranking Geral — ${rankingModeLabel()}`;
+
+    return `<div class="modal-backdrop final-results-backdrop"><section class="result-card final-results-card">${logoHtml('result-logo')}<p class="eyebrow">Resultado final</p><h1>${title}</h1><p class="result-rule">Primeiro conta-se o total de carpas. Em empate, vence quem tiver mais moedas.</p><div class="ranking ranking-with-general"><div class="ranking-table-header"><span>Partida</span><span>Jogador</span><span></span><span>Pontuação</span><span>Moedas</span><span>${escapeHtml(rankingLabel)}</span></div>${ranking.map(({ player, score, coins }, index) => `<div class="${index === 0 ? 'winner-row' : ''}"><strong>${index + 1}º</strong>${playerNameChip(player)}${colorBadge(player.color)}<span>${score} carpas</span><span class="ranking-coins"><img src="${ASSETS.coin}" alt="">${coins}</span><span class="general-rank-position">${rankingPositionText(player.id)}</span></div>`).join('')}</div>${generalRankingLeaderHtml()}<div class="final-result-actions">${restartButton}<button id="finalExitGame" class="secondary-button">Sair</button></div></section></div>`;
   }
 
   function logPanelHtml() {
@@ -793,7 +905,7 @@
   }
 
   function waitExitButtonHtml() {
-    return '<button type="button" class="danger-button wait-exit-game">Sair</button>';
+    return '<button type="button" class="danger-button wait-exit-game">Sair da partida</button>';
   }
 
   function serverConnectionUiHtml() {
@@ -808,7 +920,7 @@
     if (!absent.length) return '';
     const first = absent[0];
     const extra = absent.length > 1 ? ` e mais ${absent.length - 1} jogador(es)` : '';
-    return `<div class="modal-backdrop player-wait-backdrop"><section class="modal-card wait-card"><img class="wait-fish-gif" src="${ASSETS.fishAnimation}" alt="" aria-hidden="true"><p class="eyebrow">Partida pausada</p><h2>Jogador ${escapeHtml(first.name)} saiu${extra}</h2><p>Aguardando retorno do jogador ${escapeHtml(first.name)}. A partida continua automaticamente quando todos estiverem presentes.</p>${absent.length > 1 ? `<div class="absent-list">${absent.map((player) => playerNameChip(player)).join('')}</div>` : ''}${waitExitButtonHtml()}</section></div>`;
+    return `<div class="modal-backdrop player-wait-backdrop"><section class="modal-card wait-card"><img class="wait-fish-gif" src="${ASSETS.fishAnimation}" alt="" aria-hidden="true"><p class="eyebrow">Partida pausada</p><h2>Jogador ${escapeHtml(first.name)} desconectou${extra}</h2><p><strong>Aguarde o retorno do jogador ${escapeHtml(first.name)}.</strong> A partida continua automaticamente quando todos estiverem presentes.</p>${absent.length > 1 ? `<div class="absent-list">${absent.map((player) => playerNameChip(player)).join('')}</div>` : ''}${waitExitButtonHtml()}</section></div>`;
   }
 
   function restartUiHtml() {
@@ -969,25 +1081,13 @@
         const row = Number(cell.dataset.row);
         const col = Number(cell.dataset.col);
         if (state.phase === 'movement') {
-          if (Date.now() < interactionLockedUntil) {
-            movementError = 'Aguarde a animação do movimento anterior terminar.';
-            render();
-            return;
-          }
-          const response = await emit('movePiece', { from: { row, col } });
-          if (response?.ok) interactionLockedUntil = Date.now() + (response.specialMoved ? 920 : 620);
+          await emit('movePiece', { from: { row, col } });
         }
         if (state.phase === 'development') emit('replaceFish', { position: { row, col } });
       });
     });
     document.querySelector('#undoMove')?.addEventListener('click', async () => {
-      if (Date.now() < interactionLockedUntil) {
-        movementError = 'Aguarde a animação do movimento anterior terminar.';
-        render();
-        return;
-      }
-      const response = await emit('undoMove');
-      if (response?.ok) interactionLockedUntil = Date.now() + 360;
+      await emit('undoMove');
     });
     document.querySelector('#buyExtraMove')?.addEventListener('click', () => emit('buyExtraMove'));
     document.querySelector('#finishMovement')?.addEventListener('click', () => emit('finishMovement'));

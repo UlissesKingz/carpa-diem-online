@@ -172,10 +172,10 @@
       <div class="section-heading">
         <p class="eyebrow">Fase 1</p>
         <h2>Fase de Movimentação</h2>
-        <p>Carpas e plantas são movidas pelo jogador. As quatro peças especiais movem-se automaticamente quando o espaço vazio cria a condição da ação.</p>
+        <p>Carpas, plantas e peças especiais podem ser movidas pelo jogador para o espaço vazio ortogonalmente adjacente. Mover manualmente uma peça especial custa 1 movimento. Além disso, as peças especiais continuam executando suas ações automáticas quando o espaço vazio cria a condição correspondente.</p>
       </div>
 
-      <div class="manual-note special-priority-note"><strong>Prioridade automática:</strong> apenas uma peça especial move-se automaticamente a cada novo espaço vazio, nesta ordem: Tesourinhas → Papa-terra → Dojô → Esturjão. O quadro de movimentos informa o que aconteceu e quantos movimentos foram consumidos.</div>
+      <div class="manual-note special-priority-note"><strong>Movimento manual das especiais:</strong> qualquer peça especial ortogonalmente adjacente ao vazio pode ser clicada e deslocada para ele por <strong>1 movimento</strong>. Esse deslocamento manual não ativa imediatamente a ação automática da própria peça que acabou de ser movida. <strong>Prioridade automática:</strong> quando um novo vazio ativa peças especiais, apenas uma age automaticamente, nesta ordem: Tesourinhas → Papa-terra → Dojô → Esturjão. O quadro de movimentos informa o que aconteceu e quantos movimentos foram consumidos.</div>
 
       <div class="rule-grid expanded-rule-grid">
         <article class="manual-card rule-card rule-card-carp">
@@ -205,7 +205,7 @@
           <div class="rule-copy">
             <span class="cost-badge">−1 movimento</span>
             <h3>Tesourinhas</h3>
-            <p>Quando o vazio surge ortogonalmente ao lado delas, ocupam esse espaço automaticamente.</p>
+            <p>Movimento manual para o vazio adjacente: 1 movimento. Na ação automática, quando o vazio surge ortogonalmente ao lado delas, ocupam esse espaço por 1 movimento.</p>
           </div>
           <div class="before-after" data-example="shoal"></div>
           <figure class="rule-animation"><img src="/assets/movimento-cardume.gif" alt="Animação das Tesourinhas ocupando o vazio adjacente"></figure>
@@ -216,7 +216,7 @@
           <div class="rule-copy">
             <span class="cost-badge heavy">−3 movimentos</span>
             <h3>Esturjão</h3>
-            <p>Se o vazio estiver na mesma linha ou coluna, empurra todas as peças à sua frente uma casa em direção ao vazio. O custo é sempre 3, independentemente da quantidade empurrada.</p>
+            <p>Movimento manual para o vazio adjacente: 1 movimento. Na ação automática, se o vazio estiver na mesma linha ou coluna, empurra todas as peças à sua frente uma casa em direção ao vazio por 3 movimentos, independentemente da quantidade empurrada.</p>
           </div>
           <figure class="rule-animation"><img src="/assets/movimento-esturjao.gif" alt="Animação do Esturjão empurrando uma sequência de peças até o espaço vazio"></figure>
         </article>
@@ -226,7 +226,7 @@
           <div class="rule-copy">
             <span class="cost-badge">−1 movimento</span>
             <h3>Dojô</h3>
-            <p>Se o vazio estiver em qualquer casa da diagonal, atravessa por baixo das peças e aparece diretamente no espaço vazio.</p>
+            <p>Movimento manual para o vazio adjacente: 1 movimento. Na ação automática, se o vazio estiver em qualquer casa da diagonal, atravessa por baixo das peças e aparece diretamente no espaço vazio por 1 movimento.</p>
           </div>
           <figure class="rule-animation"><img src="/assets/movimento-dojo.gif" alt="Animação do Dojô atravessando o tanque pela diagonal até o espaço vazio"></figure>
         </article>
@@ -236,7 +236,7 @@
           <div class="rule-copy">
             <span class="cost-badge free">0 movimentos</span>
             <h3>Papa-terra</h3>
-            <p>Quando há exatamente uma peça entre ele e o vazio, ortogonalmente, troca de lugar com essa peça. O espaço vazio permanece onde estava.</p>
+            <p>Movimento manual para o vazio adjacente: 1 movimento. Na ação automática, quando há exatamente uma peça entre ele e o vazio, ortogonalmente, troca de lugar com essa peça sem gastar movimento. O espaço vazio permanece onde estava.</p>
           </div>
           <figure class="rule-animation"><img src="/assets/movimento-papa-terra.gif" alt="Animação do Papa-terra trocando de lugar com a peça entre ele e o vazio"></figure>
         </article>
@@ -356,7 +356,7 @@
 
       <div class="solo-intro-grid">
         <article class="manual-card solo-info-card"><span>1</span><h3>Preparação</h3><p>Seu tanque começa com 28 carpas, 4 plantas, 2 peças especiais aleatórias e o centro vazio.</p></article>
-        <article class="manual-card solo-info-card"><span>2</span><h3>Automa visível</h3><p>Acima do tanque aparece uma linha com 7 peças. Ela mostra exatamente o que entrará na próxima Correnteza.</p></article>
+        <article class="manual-card solo-info-card"><span>2</span><h3>Automa visível</h3><p>Acima do tanque aparece uma linha com 7 peças. Ela mostra exatamente o que entrará na próxima Correnteza e nunca traz carpas da sua cor preferida.</p></article>
         <article class="manual-card solo-info-card"><span>3</span><h3>Venda normal</h3><p>Depois da Correnteza, a fase de Venda e reposição funciona da mesma maneira que nas partidas com várias pessoas.</p></article>
       </div>
 
@@ -365,6 +365,7 @@
           <p class="eyebrow">Próxima linha</p>
           <h3>Leia o Automa antes de planejar seus movimentos.</h3>
           <p>No fim da fase, as 7 peças da sua linha central saem pela esquerda e as 7 peças mostradas pelo Automa entram pela direita, mantendo a ordem.</p>
+          <p><strong>Importante:</strong> o Automa nunca sorteia carpas da sua cor preferida. Novas carpas da sua cor são criadas por você durante a Venda e reposição.</p>
         </div>
         <div class="manual-automa-line" aria-label="Exemplo de uma linha do Automa">
           <span><img src="/assets/carp-yellow.png" alt="Carpa amarela"></span>
@@ -392,7 +393,7 @@
       <div class="manual-card solo-score-example">
         <div><p class="eyebrow">Pontuação final</p><h3>Carpas preferidas que saíram + carpas preferidas que permaneceram</h3></div>
         <div class="solo-score-formula"><span>12 que saíram</span><b>+</b><span>9 no tanque</span><b>=</b><strong>21 pontos</strong></div>
-        <p>Após a 6ª rodada, o jogo mostra seu resultado, salva o recorde neste navegador, dá os parabéns e sugere tirar um print. Você pode reiniciar ou sair.</p>
+        <p>Como o Automa nunca traz carpas da sua cor preferida, seu crescimento depende das reposições que você conquista. Após a 6ª rodada, o jogo mostra seu resultado e sua posição no <strong>Ranking Geral — Solo</strong>, dá os parabéns e sugere tirar um print. Você pode reiniciar ou sair.</p>
       </div>
     </section>
 
@@ -409,6 +410,7 @@
         <article class="manual-card online-card"><span>↻</span><h3>Reinício</h3><p>Uma partida só é reiniciada quando todos os jogadores aprovam. Espectadores não votam.</p></article>
         <article class="manual-card online-card"><span>⏳</span><h3>Salas vazias</h3><p>Uma sala sem jogadores nem espectadores é encerrada e excluída após 10 minutos.</p></article>
         <article class="manual-card online-card"><span>≡</span><h3>Informação aberta</h3><p>Você pode observar os tanques adversários e acompanhar a pontuação parcial durante a partida.</p></article>
+        <article class="manual-card online-card"><span>★</span><h3>Ranking Geral</h3><p>Ao fim da partida, o resultado entra automaticamente no ranking da modalidade jogada: Solo, 2, 3 ou 4 jogadores. A tela final mostra a colocação de cada jogador e o 1º lugar daquele ranking. Na tela inicial, o botão <strong>Maior pontuador</strong> mostra o líder de cada modalidade. Desempates no ranking seguem: pontuação final, moedas e, persistindo o empate, quem alcançou o recorde primeiro.</p></article>
       </div>
     </section>
 
@@ -420,13 +422,14 @@
       <div class="reference-grid">
         <div class="reference-block"><strong>Carpa</strong><span>Desliza para o vazio</span><b>−1 movimento</b></div>
         <div class="reference-block"><strong>Planta</strong><span>Move e obriga uma carpa</span><b>0 movimentos</b></div>
-        <div class="reference-block"><strong>Tesourinhas</strong><span>Invadem o vazio adjacente</span><b>−1 movimento</b></div>
-        <div class="reference-block"><strong>Esturjão</strong><span>Empurra linha ou coluna</span><b>−3 movimentos</b></div>
-        <div class="reference-block"><strong>Dojô</strong><span>Atravessa pela diagonal</span><b>−1 movimento</b></div>
-        <div class="reference-block"><strong>Papa-terra</strong><span>Troca com a peça intermediária</span><b>0 movimentos</b></div>
+        <div class="reference-block"><strong>Tesourinhas</strong><span>Manual: move ao vazio por 1 · Automática: invade o vazio adjacente</span><b>Automática: −1</b></div>
+        <div class="reference-block"><strong>Esturjão</strong><span>Manual: move ao vazio por 1 · Automática: empurra linha ou coluna</span><b>Automática: −3</b></div>
+        <div class="reference-block"><strong>Dojô</strong><span>Manual: move ao vazio por 1 · Automática: atravessa pela diagonal</span><b>Automática: −1</b></div>
+        <div class="reference-block"><strong>Papa-terra</strong><span>Manual: move ao vazio por 1 · Automática: troca com a intermediária</span><b>Automática: 0</b></div>
         <div class="reference-block"><strong>Correnteza</strong><span>Transfere 7 peças na ordem</span><b>Linha central</b></div>
         <div class="reference-block"><strong>Venda</strong><span>Menor cor → preferida</span><b>+1 moeda</b></div>
-        <div class="reference-block"><strong>Modo solo</strong><span>Saídas preferidas + tanque final</span><b>Seu recorde</b></div>
+        <div class="reference-block"><strong>Modo solo</strong><span>Saídas preferidas + tanque final</span><b>Ranking Solo</b></div>
+        <div class="reference-block"><strong>Ranking Geral</strong><span>Separado por Solo, 2, 3 e 4 jogadores</span><b>Pontos → moedas → primeiro a chegar</b></div>
       </div>
       <div class="manual-final-actions">
         <a class="primary-button" href="/device.html">Começar a jogar</a>

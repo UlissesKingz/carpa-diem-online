@@ -43,7 +43,7 @@ function createPiece(type, color = null) {
   };
 }
 
-function createInitialBoard(playerCount = 2, mode = 'multiplayer') {
+function createInitialBoard(playerCount = 2, mode = 'multiplayer', specialTypesForBoard = null) {
   const pieces = [];
   for (const color of COLORS) {
     for (let i = 0; i < 7; i += 1) pieces.push(createPiece('carp', color));
@@ -51,9 +51,12 @@ function createInitialBoard(playerCount = 2, mode = 'multiplayer') {
 
   const isTwoOrSolo = mode === 'solo' || playerCount === 2;
   const algaeCount = isTwoOrSolo ? 4 : 5;
-  const specialCount = isTwoOrSolo ? 2 : 1;
+  const fallbackSpecialCount = isTwoOrSolo ? 2 : 1;
+  const chosenSpecialTypes = Array.isArray(specialTypesForBoard) && specialTypesForBoard.length
+    ? [...specialTypesForBoard]
+    : shuffle(SPECIAL_TYPES).slice(0, fallbackSpecialCount);
   for (let i = 0; i < algaeCount; i += 1) pieces.push(createPiece('algae'));
-  shuffle(SPECIAL_TYPES).slice(0, specialCount).forEach((type) => pieces.push(createPiece(type)));
+  chosenSpecialTypes.forEach((type) => pieces.push(createPiece(type)));
 
   const shuffled = shuffle(pieces);
   const board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
@@ -185,10 +188,12 @@ function sameOrthogonalLine(a, b) {
   return (a.row === b.row || a.col === b.col) && !(a.row === b.row && a.col === b.col);
 }
 
-function detectSpecialTrigger(board, emptyPosition) {
+function detectSpecialTrigger(board, emptyPosition, { excludePieceId = null } = {}) {
   for (const type of SPECIAL_PRIORITY) {
     const position = findPiecePosition(board, type);
     if (!position) continue;
+    const specialPiece = board[position.row][position.col];
+    if (excludePieceId && specialPiece?.id === excludePieceId) continue;
 
     if (type === 'shoal' && isOrthogonallyAdjacent(position, emptyPosition)) {
       return { type, position, empty: { ...emptyPosition }, cost: SPECIAL_COSTS[type] };
@@ -213,6 +218,45 @@ function detectSpecialTrigger(board, emptyPosition) {
     }
   }
   return null;
+}
+
+function hasValidMovementOption(player) {
+  if (!player?.board || player.movementReady || player.correctionRequired || player.movesRemaining <= 0) return true;
+  const board = player.board;
+  const empty = findEmpty(board);
+
+  for (const from of adjacentPositions(empty)) {
+    const piece = board[from.row][from.col];
+    if (!piece) continue;
+    if (player.mustMoveCarp && piece.type !== 'carp') continue;
+
+    const projected = cloneBoard(board);
+    projected[empty.row][empty.col] = clonePiece(piece);
+    projected[from.row][from.col] = null;
+
+    const manuallyMovedSpecial = SPECIAL_TYPES.includes(piece.type);
+    const specialTrigger = detectSpecialTrigger(projected, from, {
+      excludePieceId: manuallyMovedSpecial ? piece.id : null
+    });
+    const createsCarpObligation = piece.type === 'algae';
+    const pieceMoveCost = createsCarpObligation ? 0 : 1;
+    const specialCost = Number(specialTrigger?.cost || 0);
+    const futureRequired = createsCarpObligation ? 1 : 0;
+
+    if (player.movesRemaining >= pieceMoveCost + specialCost + futureRequired) return true;
+  }
+
+  return false;
+}
+
+function isMovementDeadEnd(player) {
+  return Boolean(
+    player?.board
+    && player.movesRemaining > 0
+    && !player.movementReady
+    && !player.correctionRequired
+    && !hasValidMovementOption(player)
+  );
 }
 
 function applySpecialTrigger(board, trigger) {
@@ -283,6 +327,7 @@ function generateAutomaLine(room, player) {
   const unavailable = specialTypesOnBoard(player.board);
   const pool = [];
   for (const color of COLORS) {
+    if (color === player.color) continue;
     for (let i = 0; i < 7; i += 1) pool.push({ type: 'carp', color });
   }
   for (let i = 0; i < 4; i += 1) pool.push({ type: 'algae' });
@@ -379,7 +424,12 @@ function setAction(room, action) {
   };
 }
 
-function createPlayer({ name, color, socketId }) {
+function normalizeRankingPlayerId(value) {
+  const normalized = String(value || '').trim().slice(0, 96);
+  return /^[A-Za-z0-9_-]{12,96}$/.test(normalized) ? normalized : null;
+}
+
+function createPlayer({ name, color, socketId, rankingPlayerId }) {
   return {
     id: randomId(6),
     token: randomId(16),
@@ -387,6 +437,7 @@ function createPlayer({ name, color, socketId }) {
     color,
     socketId,
     connected: true,
+    rankingPlayerId: normalizeRankingPlayerId(rankingPlayerId),
     board: null,
     movesRemaining: MOVES_PER_ROUND,
     mustMoveCarp: false,
@@ -413,8 +464,31 @@ function createSpectator({ name, socketId }) {
   };
 }
 
-function createRoom({ hostName, color, socketId, mode = 'multiplayer' }) {
-  const host = createPlayer({ name: hostName, color, socketId });
+function buildInitialSpecialAssignments(room) {
+  const playerCount = room.playerOrder.length;
+  const specialsPerPlayer = room.mode === 'solo' || playerCount === 2 ? 2 : 1;
+  const shuffled = shuffle(SPECIAL_TYPES);
+  const assignments = {};
+
+  if (room.mode === 'solo') {
+    assignments[room.playerOrder[0]] = shuffled.slice(0, 2);
+    return assignments;
+  }
+
+  if (playerCount === 2) {
+    assignments[room.playerOrder[0]] = shuffled.slice(0, 2);
+    assignments[room.playerOrder[1]] = shuffled.slice(2, 4);
+    return assignments;
+  }
+
+  room.playerOrder.forEach((id, index) => {
+    assignments[id] = shuffled.slice(index, index + specialsPerPlayer);
+  });
+  return assignments;
+}
+
+function createRoom({ hostName, color, socketId, mode = 'multiplayer', rankingPlayerId }) {
+  const host = createPlayer({ name: hostName, color, socketId, rankingPlayerId });
   const room = {
     code: roomCode(),
     mode: mode === 'solo' ? 'solo' : 'multiplayer',
@@ -437,13 +511,14 @@ function createRoom({ hostName, color, socketId, mode = 'multiplayer' }) {
     startedAt: null,
     finishedAt: null,
     restartCount: 0,
-    solo: null
+    solo: null,
+    rankingGeneral: null
   };
   addLog(room, 'criou a sala.', host.id);
   return room;
 }
 
-function addPlayer(room, { name, color, socketId }) {
+function addPlayer(room, { name, color, socketId, rankingPlayerId }) {
   if (room.mode === 'solo') throw new Error('Esta sala está no modo solo. Entre como espectador.');
   if (room.status !== 'lobby') throw new Error('A partida já começou. Entre como espectador.');
   if (room.playerOrder.length >= 4) throw new Error('A sala está cheia.');
@@ -453,7 +528,7 @@ function addPlayer(room, { name, color, socketId }) {
   if (!COLORS.includes(color)) throw new Error('Cor inválida.');
   const colorTaken = room.playerOrder.some((id) => room.players[id].color === color);
   if (colorTaken) throw new Error('Essa cor já foi escolhida.');
-  const player = createPlayer({ name, color, socketId });
+  const player = createPlayer({ name, color, socketId, rankingPlayerId });
   room.players[player.id] = player;
   room.playerOrder.push(player.id);
   addLog(room, 'entrou na sala.', player.id);
@@ -494,7 +569,7 @@ function removeMember(room, memberId, role) {
 }
 
 function resetPlayerForRound(player, initializeBoard = false, setup = {}) {
-  if (initializeBoard) player.board = createInitialBoard(setup.playerCount || 2, setup.mode || 'multiplayer');
+  if (initializeBoard) player.board = createInitialBoard(setup.playerCount || 2, setup.mode || 'multiplayer', setup.specialTypes || null);
   player.movesRemaining = MOVES_PER_ROUND;
   player.mustMoveCarp = false;
   player.correctionRequired = false;
@@ -517,17 +592,23 @@ function initializeMatch(room, restarted = false) {
   room.matchId = randomId(10);
   room.startedAt = Date.now();
   room.finishedAt = null;
+  room.rankingGeneral = null;
   if (restarted) room.restartCount += 1;
   room.solo = room.mode === 'solo' ? {
     exitedPreferred: 0,
     automaLine: null,
     specialCooldown: Object.fromEntries(SPECIAL_TYPES.map((type) => [type, 0]))
   } : null;
+  const specialAssignments = buildInitialSpecialAssignments(room);
   for (const id of room.playerOrder) {
     const player = room.players[id];
     player.discard = Object.fromEntries(COLORS.map((item) => [item, 0]));
     player.coins = 0;
-    resetPlayerForRound(player, true, { playerCount: room.playerOrder.length, mode: room.mode });
+    resetPlayerForRound(player, true, {
+      playerCount: room.playerOrder.length,
+      mode: room.mode,
+      specialTypes: specialAssignments[id] || null
+    });
   }
   if (room.mode === 'solo') generateAutomaLine(room, room.players[room.playerOrder[0]]);
   setAction(room, { type: restarted ? 'restartComplete' : 'gameStart' });
@@ -620,13 +701,15 @@ function movePiece(room, playerId, from) {
   }
 
   if (player.movesRemaining <= 0) throw new Error('Seus movimentos disponíveis terminaram. Compre um movimento extra ou conclua a fase.');
-  if (SPECIAL_TYPES.includes(piece.type)) throw new Error('As peças especiais se movimentam automaticamente quando o espaço vazio ativa sua ação.');
   if (player.mustMoveCarp && piece.type !== 'carp') throw new Error('Depois de uma alga, você deve mover uma carpa.');
 
   const projected = cloneBoard(board);
   projected[empty.row][empty.col] = clonePiece(piece);
   projected[from.row][from.col] = null;
-  const specialTrigger = detectSpecialTrigger(projected, from);
+  const manuallyMovedSpecial = SPECIAL_TYPES.includes(piece.type);
+  const specialTrigger = detectSpecialTrigger(projected, from, {
+    excludePieceId: manuallyMovedSpecial ? piece.id : null
+  });
   const createsCarpObligation = piece.type === 'algae';
   const pieceMoveCost = createsCarpObligation ? 0 : 1;
   const specialCost = Number(specialTrigger?.cost || 0);
@@ -647,7 +730,9 @@ function movePiece(room, playerId, from) {
   if (createsCarpObligation) player.mustMoveCarp = true;
 
   let specialAction = null;
-  const trigger = detectSpecialTrigger(board, findEmpty(board));
+  const trigger = detectSpecialTrigger(board, findEmpty(board), {
+    excludePieceId: manuallyMovedSpecial ? piece.id : null
+  });
   if (trigger) {
     specialAction = applySpecialTrigger(board, trigger);
     player.movesRemaining -= specialAction.cost;
@@ -1027,7 +1112,8 @@ function publicRoom(room) {
       extraMovesPurchased: player.extraMovesPurchased,
       moveLimit: MOVES_PER_ROUND + player.extraMovesPurchased,
       discard: player.discard,
-      specialAlert: player.specialAlert || ''
+      specialAlert: player.specialAlert || '',
+      movementDeadEnd: room.phase === 'movement' ? isMovementDeadEnd(player) : false
     };
   }
 
@@ -1059,6 +1145,7 @@ function publicRoom(room) {
     logs: room.logs.slice(-50),
     liveScores: room.playerOrder.every((id) => room.players[id].board) ? calculateScores(room) : null,
     winner: room.winner,
+    rankingGeneral: room.rankingGeneral || null,
     disconnectedPlayerIds: room.playerOrder.filter((id) => !room.players[id].connected),
     restartVote: room.restartVote ? {
       id: room.restartVote.id,

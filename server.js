@@ -34,10 +34,18 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (_req, res) => res.redirect('/device.html'));
 app.get('/health', (_req, res) => res.json({ ok: true, storage: storage.status() }));
+app.get('/api/ranking/leaders', async (_req, res) => {
+  try {
+    res.json({ ok: true, ...(await storage.getRankingLeaders()) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
 
 const rooms = new Map();
 const circulationTimers = new Map();
 const emptyRoomTimers = new Map();
+const rankingJobs = new Set();
 const EMPTY_ROOM_CLOSE_MS = 10 * 60 * 1000;
 let heartbeatTimer = null;
 let shuttingDown = false;
@@ -218,6 +226,11 @@ app.get('/api/admin/matches/:matchId', adminAuth, async (req, res) => {
   }
 });
 
+function normalizeRankingPlayerId(value) {
+  const normalized = String(value || '').trim().slice(0, 96);
+  return /^[A-Za-z0-9_-]{12,96}$/.test(normalized) ? normalized : null;
+}
+
 function uniqueRoom(options) {
   let room;
   do room = createRoom(options); while (rooms.has(room.code));
@@ -239,10 +252,30 @@ function persistRoom(room) {
   }
 }
 
+function refreshRankingForFinishedRoom(room) {
+  if (room.status !== 'finished' || !room.winner || !room.matchId) return;
+  if (room.rankingGeneral?.matchId === room.matchId) return;
+  if (rankingJobs.has(room.matchId)) return;
+
+  rankingJobs.add(room.matchId);
+  fireAndForget((async () => {
+    try {
+      const rankingGeneral = await storage.registerRankingResults(room);
+      room.rankingGeneral = { ...rankingGeneral, matchId: room.matchId };
+      room.updatedAt = Date.now();
+      io.to(room.code).emit('roomState', publicRoom(room));
+      persistRoom(room);
+    } finally {
+      rankingJobs.delete(room.matchId);
+    }
+  })(), `[MongoDB] Falha ao atualizar Ranking Geral da partida ${room.matchId}`);
+}
+
 function emitRoom(room) {
   room.updatedAt = Date.now();
   io.to(room.code).emit('roomState', publicRoom(room));
   persistRoom(room);
+  refreshRankingForFinishedRoom(room);
   scheduleCirculation(room);
 }
 
@@ -345,7 +378,7 @@ function clearSocketRoom(socket) {
 io.on('connection', (socket) => {
   socket.on('createRoom', safeHandler(socket, (payload = {}) => {
     if (!COLORS.includes(payload.color)) throw new Error('Escolha uma cor válida.');
-    const room = uniqueRoom({ hostName: payload.name, color: payload.color, socketId: socket.id, mode: payload.mode });
+    const room = uniqueRoom({ hostName: payload.name, color: payload.color, socketId: socket.id, mode: payload.mode, rankingPlayerId: payload.rankingPlayerId });
     rooms.set(room.code, room);
     const player = room.players[room.hostId];
     storage.ensureAudit(room);
@@ -384,10 +417,11 @@ io.on('connection', (socket) => {
     if (player) {
       player.socketId = socket.id;
       player.connected = true;
+      if (!player.rankingPlayerId) player.rankingPlayerId = normalizeRankingPlayerId(payload.rankingPlayerId);
       resumeCirculation(room);
       room.logs.push({ at: Date.now(), text: 'voltou à partida.', actorId: player.id, actorRole: 'player' });
     } else {
-      player = addPlayer(room, { name: payload.name, color: payload.color, socketId: socket.id });
+      player = addPlayer(room, { name: payload.name, color: payload.color, socketId: socket.id, rankingPlayerId: payload.rankingPlayerId });
     }
 
     attachSocketToRoom(socket, room, player, 'player');
@@ -621,7 +655,7 @@ async function bootstrap() {
   }
 
   server.listen(PORT, () => {
-    console.log(`Carpas Online disponível em http://localhost:${PORT}`);
+    console.log(`Carpa Diem Online disponível em http://localhost:${PORT}`);
   });
 }
 

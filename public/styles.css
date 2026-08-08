@@ -47,6 +47,7 @@ body::before {
   z-index: 0;
 }
 body.initial-lobby-scene::before { opacity: .5; }
+body:not(.initial-lobby-scene)::before { background-image: none; }
 
 body::after {
   content: "";
@@ -1922,4 +1923,194 @@ body[data-layout="mobile"] .mobile-phase-confirm-slot {
   .game-shell .right-rail > .log-panel {
     order: 6;
   }
+}
+
+/* Ranking Geral — recordes por modalidade */
+.ranking-leaders-backdrop { z-index: 190; }
+.ranking-leaders-card { width: min(620px, 100%); text-align: center; }
+.ranking-leaders-card h2 { margin-bottom: 18px; }
+.ranking-leaders-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0;
+  text-align: left;
+}
+.ranking-leader-mode {
+  display: grid;
+  gap: 4px;
+  padding: 13px 14px;
+  border: 1px solid rgba(102, 214, 202, .16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .035);
+}
+.ranking-leader-mode p { margin: 0; }
+.ranking-leader-mode strong { color: var(--text); font-size: 1rem; }
+.ranking-leader-mode span { color: var(--muted); font-size: .78rem; }
+.ranking-leaders-loading { margin: 22px 0; }
+.ranking-leaders-card .close-ranking-leaders { width: 100%; margin-top: 4px; }
+
+.final-results-card .ranking-with-general > div,
+.final-results-card .ranking-with-general > div.winner-row {
+  grid-template-columns: 42px minmax(120px, 1fr) auto auto 82px minmax(125px, auto);
+}
+.final-results-card .ranking-with-general .ranking-table-header {
+  display: grid;
+  align-items: end;
+  gap: 10px;
+  padding: 0 13px 7px;
+  border: 0;
+  border-radius: 0;
+  color: var(--muted);
+  background: transparent;
+  box-shadow: none;
+  font-size: .68rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.ranking-table-header span:nth-child(4),
+.ranking-table-header span:nth-child(5),
+.ranking-table-header span:nth-child(6) { text-align: right; }
+.general-rank-position {
+  color: var(--teal) !important;
+  font-weight: 950 !important;
+  text-align: right;
+  white-space: nowrap;
+}
+.general-ranking-leader {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin: 18px auto 0;
+  padding: 13px 16px;
+  border: 1px solid rgba(242, 196, 67, .28);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(91, 62, 13, .18), rgba(255, 255, 255, .025));
+}
+.general-ranking-leader p { margin: 0; }
+.general-ranking-leader > strong { color: #ffe19a; font-size: 1.02rem; }
+.general-ranking-leader > span { color: var(--muted); font-size: .82rem; font-weight: 800; }
+.general-ranking-leader.pending { border-color: var(--line); background: rgba(255, 255, 255, .025); }
+.solo-result-coins {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 auto 12px;
+  color: #ffe19a;
+}
+.solo-result-coins img { width: 24px; height: 24px; object-fit: contain; }
+.solo-result-coins strong { font-size: 1.05rem; }
+.solo-result-coins span { color: var(--muted); font-size: .82rem; font-weight: 800; }
+.solo-general-ranking {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(102, 214, 202, .23);
+  border-radius: 13px;
+  background: rgba(102, 214, 202, .07);
+  text-align: left;
+}
+.solo-general-ranking span { color: var(--text); font-size: .82rem; font-weight: 850; }
+.solo-general-ranking strong { color: var(--teal); font-size: 1.25rem; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .ranking-leaders-grid { grid-template-columns: 1fr; }
+  .initial-external-actions .top-action { min-width: 108px; }
+  .final-results-card .ranking-with-general > div,
+  .final-results-card .ranking-with-general > div.winner-row {
+    grid-template-columns: 34px minmax(78px, 1fr) auto auto minmax(56px, auto);
+    gap: 7px;
+    padding: 10px 9px;
+  }
+  .final-results-card .ranking-with-general .ranking-table-header {
+    grid-template-columns: 34px minmax(78px, 1fr) auto auto minmax(56px, auto);
+    padding: 0 9px 6px;
+    font-size: .55rem;
+  }
+  .ranking-with-general .color-badge,
+  .ranking-table-header span:nth-child(3) { display: none; }
+  .ranking-table-header span:nth-child(4) { grid-column: 3; }
+  .ranking-table-header span:nth-child(5) { grid-column: 4; }
+  .ranking-table-header span:nth-child(6) { grid-column: 5; }
+  .final-results-card .ranking-with-general > div > span:nth-last-child(3) {
+    grid-column: 3;
+    font-size: .7rem;
+    white-space: nowrap;
+  }
+  .final-results-card .ranking-with-general .ranking-coins {
+    grid-column: 4;
+    grid-row: auto;
+    font-size: .72rem;
+  }
+  .final-results-card .ranking-with-general .ranking-coins img { width: 18px; height: 18px; }
+  .final-results-card .ranking-with-general .general-rank-position {
+    grid-column: 5;
+    grid-row: auto;
+    font-size: .76rem;
+  }
+}
+
+
+/* Desempenho mobile: preserva a leitura do tabuleiro, mas remove efeitos contínuos caros. */
+body[data-layout="mobile"] .tank-liquid-layer {
+  display: none !important;
+}
+
+body[data-layout="mobile"] .tank-water-layer::after {
+  display: none !important;
+  animation: none !important;
+}
+
+body[data-layout="mobile"] .tank {
+  filter: none;
+}
+
+body[data-layout="mobile"] .piece-shell-sturgeon,
+body[data-layout="mobile"] .piece-shell-dojo,
+body[data-layout="mobile"] .piece-shell-papaTerra,
+body[data-layout="mobile"] .piece-shell-shoal {
+  filter: none;
+}
+
+body[data-layout="mobile"] .last-moved-art,
+body[data-layout="mobile"] .special-effect-moved-art,
+body[data-layout="mobile"] .empty-water {
+  animation: none !important;
+}
+
+body[data-layout="mobile"] .tank-cell.replaceable {
+  animation: none !important;
+}
+
+body[data-layout="mobile"] .topbar,
+body[data-layout="mobile"] .modal-backdrop,
+body[data-layout="mobile"] .contact-fab,
+body[data-layout="mobile"] .music-toggle-fab,
+body[data-layout="mobile"] .contact-backdrop,
+body[data-layout="mobile"] .device-card,
+body[data-layout="mobile"] .entry-card,
+body[data-layout="mobile"] .lobby-card,
+body[data-layout="mobile"] .result-card {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Mantém feedback dos movimentos, mas com animações curtas e leves. */
+body[data-layout="mobile"] .animate-slide,
+body[data-layout="mobile"] .animate-special,
+body[data-layout="mobile"] .animate-shoal,
+body[data-layout="mobile"] .animate-replace,
+body[data-layout="mobile"] .animate-undo {
+  animation-duration: .28s !important;
+}
+
+body[data-layout="mobile"] .animate-line-out,
+body[data-layout="mobile"] .animate-line-in {
+  animation-duration: .72s !important;
 }
