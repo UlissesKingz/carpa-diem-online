@@ -57,6 +57,74 @@
     document.body.appendChild(button);
   }
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  function closeGlobalRanking() {
+    document.querySelector('.global-ranking-backdrop')?.remove();
+  }
+
+  function globalRankingContent(data) {
+    if (data?.available === false) {
+      return '<p class="ranking-leaders-loading">Ranking temporariamente indisponível.</p>';
+    }
+
+    const modes = ['solo', '2', '3', '4'];
+    return `<div class="ranking-leaders-grid">${modes.map((mode) => {
+      const item = data?.leaders?.[mode];
+      const leader = item?.leader;
+      const label = item?.label || (mode === 'solo' ? 'Solo' : `${mode} jogadores`);
+      const score = Number(leader?.score || 0);
+      const coins = Number(leader?.coins || 0);
+      return `<article class="ranking-leader-mode">
+        <p class="eyebrow">${escapeHtml(label)}</p>
+        ${leader
+          ? `<strong>${escapeHtml(leader.nickname)}</strong><span>${score} carpas · ${coins} moeda${coins === 1 ? '' : 's'}</span>`
+          : '<strong>Sem recorde</strong><span>Ainda não há resultado registrado.</span>'}
+      </article>`;
+    }).join('')}</div>`;
+  }
+
+  async function openGlobalRanking() {
+    if (document.querySelector('.global-ranking-backdrop')) return;
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop ranking-leaders-backdrop global-ranking-backdrop';
+    backdrop.setAttribute('role', 'dialog');
+    backdrop.setAttribute('aria-modal', 'true');
+    backdrop.setAttribute('aria-labelledby', 'globalRankingTitle');
+    backdrop.innerHTML = `
+      <section class="modal-card ranking-leaders-card">
+        <p class="eyebrow">Ranking Geral</p>
+        <h2 id="globalRankingTitle">Maiores pontuações</h2>
+        <div class="global-ranking-content"><p class="ranking-leaders-loading">Carregando os maiores pontuadores...</p></div>
+        <button class="secondary-button close-global-ranking" type="button">Voltar</button>
+      </section>`;
+
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop || event.target.closest('.close-global-ranking')) closeGlobalRanking();
+    });
+    document.body.appendChild(backdrop);
+    backdrop.querySelector('.close-global-ranking')?.focus();
+
+    try {
+      const response = await fetch('/api/ranking/leaders', { headers: { Accept: 'application/json' } });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Não foi possível carregar o ranking.');
+      const content = backdrop.querySelector('.global-ranking-content');
+      if (content) content.innerHTML = globalRankingContent(data);
+    } catch (error) {
+      const content = backdrop.querySelector('.global-ranking-content');
+      if (content) content.innerHTML = `<p class="notice error">${escapeHtml(error?.message || 'Não foi possível carregar o ranking.')}</p>`;
+    }
+  }
+
   function updateMusicButton() {
     if (!musicButton) return;
     musicButton.setAttribute('aria-pressed', musicEnabled ? 'true' : 'false');
@@ -142,8 +210,15 @@
     initialize();
   }
 
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('.global-ranking-leaders-button')) openGlobalRanking();
+  });
+
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeContact();
+    if (event.key === 'Escape') {
+      closeContact();
+      closeGlobalRanking();
+    }
     unlockBackgroundMusic();
   });
   document.addEventListener('pointerdown', unlockBackgroundMusic, { passive: true });

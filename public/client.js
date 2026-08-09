@@ -391,7 +391,7 @@
   }
 
   function initialExternalActionsHtml() {
-    return `<nav class="initial-external-actions" aria-label="Links do jogo">${externalButton('Manual', 'manual', '▤')}${externalButton('Discord', 'discord', '◉')}<button class="top-action ranking-leaders-button" type="button"><span aria-hidden="true">★</span>Maior pontuador</button></nav>`;
+    return `<nav class="initial-external-actions" aria-label="Links do jogo">${externalButton('Manual', 'manual', '▤')}${externalButton('Discord', 'discord', '◉')}<button class="top-action ranking-leaders-button" type="button"><span aria-hidden="true">★</span>Maior pontuação</button></nav>`;
   }
 
   function rankingLeadersModalHtml() {
@@ -474,6 +474,7 @@
             ${canRestart ? '<button id="restartGame" class="top-action danger-outline">↻ Reiniciar</button>' : ''}
             ${externalButton('Manual', 'manual', '▤')}
             ${externalButton('Discord', 'discord', '◉')}
+            <button class="top-action global-ranking-leaders-button" type="button"><span aria-hidden="true">★</span>Maior pontuação</button>
             <button id="exitGame" class="top-action exit-action">↪ Sair</button>
           </nav>
           <div class="topbar-identity">
