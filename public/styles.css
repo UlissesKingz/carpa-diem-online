@@ -2114,3 +2114,77 @@ body[data-layout="mobile"] .animate-line-out,
 body[data-layout="mobile"] .animate-line-in {
   animation-duration: .72s !important;
 }
+
+/* Topbar desktop: reserva a largura real dos controles para impedir que
+   os botões avancem sobre o logo quando a barra está em uma única linha. */
+@media (min-width: 1381px) {
+  .game-shell .topbar {
+    grid-template-columns: minmax(0, 1fr) 185px max-content;
+    gap: 12px;
+  }
+
+  .game-shell .topbar-brand {
+    min-width: 0;
+  }
+
+  .game-shell .topbar-logo {
+    width: min(178px, 12vw);
+    max-width: 100%;
+  }
+
+  .game-shell .topbar-controls {
+    gap: 8px;
+    min-width: max-content;
+  }
+
+  .game-shell .topbar-actions {
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
+  .game-shell .top-action {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .game-shell .topbar-identity {
+    min-width: 0;
+  }
+}
+
+/* Antes de faltar espaço, o desktop compacto passa para duas linhas.
+   Isso evita qualquer colisão entre logo, ações e identificação. */
+@media (min-width: 721px) and (max-width: 1380px) {
+  .game-shell .topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    gap: 8px 12px;
+  }
+
+  .game-shell .topbar-brand {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .game-shell .topbar-status {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .game-shell .topbar-controls {
+    grid-column: 2;
+    grid-row: 2;
+    gap: 8px;
+  }
+
+  .game-shell .topbar-actions {
+    display: flex;
+    width: auto;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
+  .game-shell .topbar-identity {
+    min-width: 0;
+  }
+}
