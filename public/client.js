@@ -59,6 +59,9 @@
   let rankingLeadersLoading = false;
   let rankingLeadersData = null;
   let rankingLeadersError = '';
+  let lastRoundIntroShown = null;
+  let roundIntroRound = null;
+  let roundIntroTimer = null;
 
   function isCompactMobile() {
     return layout === 'mobile' || window.matchMedia('(max-width: 720px)').matches;
@@ -153,6 +156,38 @@
   }
 
 
+  function roomIsAtRoundMovementStart(room) {
+    if (!room || room.status !== 'playing' || room.phase !== 'movement') return false;
+    const playerIds = Array.isArray(room.playerOrder) ? room.playerOrder : [];
+    if (!playerIds.length) return false;
+    return playerIds.every((id) => {
+      const player = room.players?.[id];
+      if (!player) return false;
+      const limit = Number(player.moveLimit || room.constants?.movesPerRound || 12);
+      return Number(player.movesRemaining) === limit && !player.movementReady;
+    });
+  }
+
+  function maybeShowRoundIntro(room) {
+    const round = Number(room?.round || 0);
+    const introKey = `${room?.code || ''}:${Number(room?.restartCount || 0)}:${round}`;
+    if (!round || lastRoundIntroShown === introKey || !roomIsAtRoundMovementStart(room)) return;
+    lastRoundIntroShown = introKey;
+    roundIntroRound = round;
+    if (roundIntroTimer) clearTimeout(roundIntroTimer);
+    roundIntroTimer = window.setTimeout(() => {
+      if (roundIntroRound === round) {
+        roundIntroRound = null;
+        render();
+      }
+    }, 1700);
+  }
+
+  function roundIntroHtml() {
+    if (!roundIntroRound) return '';
+    return `<div class="round-start-announcement" aria-live="polite"><strong>Início da Rodada ${roundIntroRound}</strong></div>`;
+  }
+
   socket.on('roomState', (room) => {
     serverConnected = true;
     reconnectingToRoom = false;
@@ -161,6 +196,7 @@
     const ownMovementSucceeded = room.lastAction?.playerId === identity.memberId
       && ['move', 'correctionMove', 'undo'].includes(room.lastAction?.type);
     state = room;
+    maybeShowRoundIntro(room);
     notice = '';
     if (phaseChanged || ownMovementSucceeded || room.phase !== 'movement') movementError = '';
     localRestartConfirm = false;
@@ -491,7 +527,7 @@
         `Faça ${state.constants.movesPerRound} movimentos usando o espaço vazio.`,
         'Mover uma planta não gasta movimento; depois dela, mova uma carpa.',
         'Peças especiais se ativam automaticamente, com prioridade: Tesourinhas, Papa-terra, Dojô e Esturjão.',
-        'Tesourinhas e Dojô gastam 1; Esturjão gasta 3; Papa-terra é gratuito.',
+        'Tesourinhas e Dojô gastam 1; Esturjão gasta 2; Papa-terra é gratuito.',
         'Se o vazio terminar na linha central, preencha-o com um movimento extra.',
         `A cada ${state.constants.extraMoveCost} moedas, compre 1 movimento extra.`
       ];
@@ -690,8 +726,7 @@
     if (state.phase === 'movement') {
       if (player.movementReady) return { text: 'Fase concluída', waiting: false };
       if (spectatorView || viewerHasFinishedCurrentPhase()) return { text: 'aguardando jogador concluir', waiting: true };
-      const limit = player.moveLimit || state.constants.movesPerRound;
-      return { text: `${limit - player.movesRemaining}/${limit}`, waiting: false };
+      return { text: 'Movimentando', waiting: false };
     }
     if (state.phase === 'development') {
       if (player.development?.done) return { text: 'Fase concluída', waiting: false };
@@ -714,13 +749,22 @@
     return `Aguarde os jogadores ${pending.slice(0, -1).join(', ')} e ${pending.at(-1)} terminarem a ${phase}.`;
   }
 
+
+  function opponentMovementCounterHtml(player) {
+    if (state.phase !== 'movement') return '';
+    const limit = Number(player?.moveLimit || state.constants.movesPerRound || 12);
+    const remaining = Math.max(0, Number(player?.movesRemaining || 0));
+    const completed = Math.max(0, limit - remaining);
+    return `<span class="opponent-move-counter" title="${completed} de ${limit} movimentos realizados"><b>${completed}</b>/${limit} mov.</span>`;
+  }
+
   function opponentsHtml() {
     return state.playerOrder
       .filter((id) => id !== identity.memberId)
       .map((id) => {
         const player = state.players[id];
         const status = playerPhaseStatus(player);
-        return `<article class="opponent-card"><header>${playerNameChip(player)}${colorBadge(player.color)}</header>${boardHtml(player, { miniature: true })}<footer class="${status.waiting ? 'phase-waiting-footer' : ''}"><span class="connection ${player.connected ? 'online' : ''}"></span>${status.text}</footer></article>`;
+        return `<article class="opponent-card"><header>${playerNameChip(player)}${colorBadge(player.color)}</header>${boardHtml(player, { miniature: true })}<footer class="${status.waiting ? 'phase-waiting-footer' : ''}"><span class="opponent-status-text"><span class="connection ${player.connected ? 'online' : ''}"></span>${status.text}</span>${opponentMovementCounterHtml(player)}</footer></article>`;
       }).join('');
   }
 
@@ -749,12 +793,13 @@
       { key: 'yellow', name: 'Carpa', text: 'Move 1 casa para o vazio.' },
       { key: 'algae', name: 'Planta', text: 'Não gasta movimento; depois dela, mova uma carpa.' },
       { key: 'shoal', name: 'Tesourinhas', text: 'Pode mover manualmente ao vazio por 1. Ao ativar, invade o vazio adjacente por 1.' },
-      { key: 'sturgeon', name: 'Esturjão', text: 'Pode mover manualmente ao vazio por 1. Ao ativar, empurra linha/coluna por 3.' },
+      { key: 'sturgeon', name: 'Esturjão', text: 'Pode mover manualmente ao vazio por 1. Ao ativar, empurra linha/coluna por 2.' },
       { key: 'dojo', name: 'Dojô', text: 'Pode mover manualmente ao vazio por 1. Ao ativar, atravessa a diagonal por 1.' },
       { key: 'papaTerra', name: 'Papa-terra', text: 'Pode mover manualmente ao vazio por 1. Sua troca automática continua grátis.' }
     ];
     return `<section class="piece-guide-card">
       <div class="piece-guide-header"><p class="eyebrow">Resumo das peças</p><strong>Como cada peça se comporta</strong></div>
+      <div class="piece-guide-priority"><strong>Prioridade automática de acesso ao vazio:</strong><span>Tesourinhas → Papa-terra → Dojô → Esturjão</span></div>
       <div class="piece-guide-grid">${items.map(({ key, name, text }) => `
         <article class="piece-guide-item">
           <span class="piece-guide-icon">${createPieceHtml({ type: key === 'yellow' ? 'carp' : key, color: key === 'yellow' ? 'yellow' : undefined, rotation: 90, id: `guide-${key}` }, 'guide', -1, -1, { tiny: true })}</span>
@@ -791,10 +836,13 @@
         <p class="phase-kicker">Fase da movimentação</p>
         <h2>Faça ${totalMoves} movimentos</h2>
         <div class="movement-score"><strong>${completed}</strong><span>/${totalMoves}</span></div>
+        <div class="movement-purchase-row">
+          <div class="movement-coins-summary"><img src="${ASSETS.coin}" alt=""><span>Você tem <strong>${current.coins}</strong> moeda${current.coins === 1 ? '' : 's'}</span><small>${state.constants.extraMoveCost} moedas = +1 movimento</small></div>
+          <button id="buyExtraMove" class="money-button movement-buy-button" ${state.phase !== 'movement' || current.movementReady || current.coins < state.constants.extraMoveCost || !serverConnected || (state.disconnectedPlayerIds || []).length ? 'disabled' : ''} title="Gaste ${state.constants.extraMoveCost} moedas para comprar 1 movimento extra"><img src="${ASSETS.coin}" alt="Moedas"><strong>Comprar</strong><small>+1 movimento</small></button>
+        </div>
         <div class="movement-progress" style="--progress:${totalMoves ? (completed / totalMoves) * 100 : 0}%"><span></span></div>
         <div class="movement-dots" style="--moves-count:${totalMoves}">${dots}</div>
         <p class="instruction">${instruction}</p>
-        <div class="coin-rule-note"><img src="${ASSETS.coin}" alt=""><span><strong>${state.constants.extraMoveCost} moedas</strong> compram 1 movimento extra.</span></div>
         ${!isCompactMobile() && canFinish ? '<button id="finishMovement" class="primary-button">Concluir movimentação</button>' : ''}
         ${!isCompactMobile() && current.movementReady && waitingForOtherPlayersMessage() ? '<button class="secondary-button try-next-phase" data-wait-phase="movement">Continuar para a próxima fase</button>' : ''}
         ${current.specialAlert ? `<p class="special-action-alert" role="status">${escapeHtml(current.specialAlert)}</p>` : ''}
@@ -1049,6 +1097,7 @@
       <div class="game-shell ${layout}">
         ${liquidFilterSvg()}
         ${topbarHtml()}
+        ${roundIntroHtml()}
         ${notice ? `<div class="notice error floating">${escapeHtml(notice)}</div>` : ''}
         ${restartUiHtml()}
         ${exitUiHtml()}
@@ -1065,7 +1114,6 @@
               <div class="tank-player-heading"><p class="eyebrow">Seu tanque</p><div class="player-title-line"><h1>${escapeHtml(current.name)}</h1><span class="preferred-carp-label">Sua carpa preferida:<img src="${ASSETS[current.color]}" alt="Carpa ${COLOR_LABELS[current.color]}"></span></div></div>
               <div class="tank-header-actions">
                 <div class="middle-count">Sua cor na linha <strong>${preferredInMiddle}</strong></div>
-                <button id="buyExtraMove" class="money-button" ${state.phase !== 'movement' || current.movementReady || current.coins < state.constants.extraMoveCost || !serverConnected || (state.disconnectedPlayerIds || []).length ? 'disabled' : ''} title="Gaste ${state.constants.extraMoveCost} moedas para comprar 1 movimento extra"><img src="${ASSETS.coin}" alt="Moedas"><strong>${current.coins}</strong><small>${state.constants.extraMoveCost} = +1 movimento</small></button>
                 <button id="undoMove" class="undo-button" ${state.phase !== 'movement' || current.movementReady || !current.movementHistoryLength ? 'disabled' : ''}>↶ Desfazer jogada</button>
               </div>
             </header>
@@ -1113,6 +1161,7 @@
       <div class="game-shell ${layout}">
         ${liquidFilterSvg()}
         ${topbarHtml()}
+        ${roundIntroHtml()}
         ${notice ? `<div class="notice error floating">${escapeHtml(notice)}</div>` : ''}
         ${restartUiHtml()}
         ${exitUiHtml()}

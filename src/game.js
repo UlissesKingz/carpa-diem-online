@@ -11,7 +11,7 @@ const EXTRA_MOVE_COST = 3;
 const COLORS = ['yellow', 'white', 'red', 'gray'];
 const SPECIAL_TYPES = ['shoal', 'sturgeon', 'dojo', 'papaTerra'];
 const SPECIAL_PRIORITY = ['shoal', 'papaTerra', 'dojo', 'sturgeon'];
-const SPECIAL_COSTS = { shoal: 1, papaTerra: 0, dojo: 1, sturgeon: 3 };
+const SPECIAL_COSTS = { shoal: 1, papaTerra: 0, dojo: 1, sturgeon: 2 };
 const SPECIAL_LABELS = { shoal: 'Tesourinhas', papaTerra: 'Papa-terra', dojo: 'Dojô', sturgeon: 'Esturjão' };
 
 function randomId(bytes = 8) {
@@ -305,7 +305,7 @@ function applySpecialTrigger(board, trigger) {
     shoal: 'Tesourinhas ocuparam o espaço vazio e consumiram 1 movimento.',
     dojo: 'Dojô atravessou o tanque pela diagonal e consumiu 1 movimento.',
     papaTerra: `Papa-terra trocou de posição com ${pieceName(board[trigger.position.row][trigger.position.col])}. Nenhum movimento foi consumido.`,
-    sturgeon: `Esturjão empurrou ${affectedCount} peça(s) e consumiu 3 movimentos.`
+    sturgeon: `Esturjão empurrou ${affectedCount} peça(s) e consumiu 2 movimentos.`
   };
   return {
     type: trigger.type,

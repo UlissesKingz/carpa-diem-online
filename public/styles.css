@@ -2188,3 +2188,176 @@ body[data-layout="mobile"] .animate-line-in {
     min-width: 0;
   }
 }
+
+/* Ajustes 09/08/2026 — compra de movimentos no painel, prioridade, rodada e adversários. */
+.movement-purchase-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: stretch;
+  margin: 0 0 11px;
+}
+
+.movement-coins-summary {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(242, 196, 67, .2);
+  border-radius: 11px;
+  color: #d7c79f;
+  background: rgba(91, 62, 13, .16);
+}
+
+.movement-coins-summary img {
+  grid-row: 1 / 3;
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.movement-coins-summary span {
+  color: #d7c79f;
+  font-size: .76rem;
+  font-weight: 750;
+}
+
+.movement-coins-summary span strong { color: #ffe39a; }
+.movement-coins-summary small {
+  color: #bda978;
+  font-size: .64rem;
+  font-weight: 800;
+}
+
+.movement-buy-button {
+  min-width: 122px;
+  align-self: stretch;
+}
+
+.piece-guide-priority {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 9px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--teal);
+  border-radius: 8px;
+  color: #c7dadb;
+  background: rgba(102, 214, 202, .07);
+  font-size: .73rem;
+  line-height: 1.35;
+}
+
+.piece-guide-priority strong { color: var(--teal); }
+.piece-guide-priority span { font-weight: 850; }
+
+.opponent-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.opponent-status-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.opponent-move-counter {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  border: 1px solid rgba(102, 214, 202, .2);
+  border-radius: 999px;
+  color: #9fb2b7;
+  background: rgba(102, 214, 202, .06);
+  font-size: .63rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.opponent-move-counter b {
+  color: var(--teal);
+  font-size: .72rem;
+}
+
+.round-start-announcement {
+  position: fixed;
+  inset: 0;
+  z-index: 118;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: rgba(4, 10, 15, .18);
+  animation: roundStartBackdrop 1.7s ease forwards;
+}
+
+.round-start-announcement strong {
+  display: block;
+  padding: .18em .38em;
+  color: var(--cream, #f9e0c1);
+  font-size: clamp(2.5rem, 7vw, 6.2rem);
+  font-weight: 950;
+  line-height: 1;
+  letter-spacing: -.035em;
+  text-align: center;
+  text-shadow: 0 8px 32px rgba(0, 0, 0, .6);
+  animation: roundStartTitle 1.7s cubic-bezier(.2, .75, .22, 1) forwards;
+}
+
+@keyframes roundStartBackdrop {
+  0% { opacity: 0; }
+  15%, 68% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes roundStartTitle {
+  0% { opacity: 0; transform: translateY(18px) scale(.94); }
+  18%, 66% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-8px) scale(1.025); }
+}
+
+@media (max-width: 720px) {
+  .movement-purchase-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .movement-coins-summary {
+    grid-template-columns: 24px minmax(0, 1fr);
+    column-gap: 6px;
+    padding: 6px 7px;
+  }
+
+  .movement-coins-summary img { width: 24px; height: 24px; }
+  .movement-coins-summary span { font-size: .62rem; }
+  .movement-coins-summary small { font-size: .55rem; }
+  .movement-buy-button { min-width: 96px; padding: 4px 7px 4px 6px; }
+  .movement-buy-button img { width: 24px; height: 24px; }
+  .movement-buy-button strong { font-size: .8rem; }
+  .movement-buy-button small { font-size: .54rem; }
+
+  .piece-guide-priority {
+    margin-bottom: 8px;
+    padding: 7px 8px;
+    font-size: .64rem;
+  }
+
+  .opponent-move-counter {
+    padding: 2px 5px;
+    font-size: .55rem;
+  }
+
+  .opponent-move-counter b { font-size: .62rem; }
+
+  .round-start-announcement strong {
+    width: min(92vw, 620px);
+    font-size: clamp(2.15rem, 11vw, 4rem);
+  }
+}
