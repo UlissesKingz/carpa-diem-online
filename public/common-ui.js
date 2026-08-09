@@ -8,6 +8,27 @@
   let musicButton = null;
   let musicEnabled = localStorage.getItem(MUSIC_ENABLED_KEY) !== 'false';
 
+
+  function ensureFavicon() {
+    const href = '/assets/favicon.png';
+    let icon = document.head.querySelector('link[rel="icon"]');
+    if (!icon) {
+      icon = document.createElement('link');
+      icon.rel = 'icon';
+      document.head.appendChild(icon);
+    }
+    icon.type = 'image/png';
+    icon.href = href;
+
+    let appleIcon = document.head.querySelector('link[rel="apple-touch-icon"]');
+    if (!appleIcon) {
+      appleIcon = document.createElement('link');
+      appleIcon.rel = 'apple-touch-icon';
+      document.head.appendChild(appleIcon);
+    }
+    appleIcon.href = href;
+  }
+
   function ensureFooter() {
     if (document.querySelector('.copyright-footer')) return;
     const footer = document.createElement('footer');
@@ -198,6 +219,7 @@
   }
 
   function initialize() {
+    ensureFavicon();
     ensureFooter();
     ensureContactButton();
     ensureBackgroundMusic();
