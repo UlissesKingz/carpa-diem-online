@@ -60,8 +60,8 @@
   function updateMusicButton() {
     if (!musicButton) return;
     musicButton.setAttribute('aria-pressed', musicEnabled ? 'true' : 'false');
-    musicButton.setAttribute('aria-label', musicEnabled ? 'Desligar música de fundo' : 'Ligar música de fundo');
-    musicButton.textContent = musicEnabled ? '♫ Música' : '♫ Música off';
+    musicButton.setAttribute('aria-label', musicEnabled ? 'Desligar som de fundo' : 'Ligar som de fundo');
+    musicButton.textContent = musicEnabled ? '♫ Som' : '♫ Som off';
   }
 
   function persistMusicTime() {
@@ -83,7 +83,7 @@
       backgroundMusic = new Audio(BACKGROUND_MUSIC_URL);
       backgroundMusic.loop = true;
       backgroundMusic.preload = 'auto';
-      backgroundMusic.volume = 0.3;
+      backgroundMusic.volume = 0.4;
       const savedTime = Number(localStorage.getItem(MUSIC_TIME_KEY) || 0);
       if (Number.isFinite(savedTime) && savedTime > 0) {
         backgroundMusic.addEventListener('loadedmetadata', () => {

@@ -793,7 +793,7 @@
         <div class="movement-progress" style="--progress:${totalMoves ? (completed / totalMoves) * 100 : 0}%"><span></span></div>
         <div class="movement-dots" style="--moves-count:${totalMoves}">${dots}</div>
         <p class="instruction">${instruction}</p>
-        <div class="coin-rule-note"><img src="${ASSETS.coin}" alt=""><span><strong>${state.constants.extraMoveCost} moedas</strong> compram 1 movimento extra. As moedas gastas são abatidas.</span></div>
+        <div class="coin-rule-note"><img src="${ASSETS.coin}" alt=""><span><strong>${state.constants.extraMoveCost} 3 moedas</strong> compram 1 movimento extra.</span></div>
         ${!isCompactMobile() && canFinish ? '<button id="finishMovement" class="primary-button">Concluir movimentação</button>' : ''}
         ${!isCompactMobile() && current.movementReady && waitingForOtherPlayersMessage() ? '<button class="secondary-button try-next-phase" data-wait-phase="movement">Continuar para a próxima fase</button>' : ''}
         ${current.specialAlert ? `<p class="special-action-alert" role="status">${escapeHtml(current.specialAlert)}</p>` : ''}
@@ -833,7 +833,7 @@
 
   function circulationPanel() {
     const description = state.mode === 'solo'
-      ? 'Sua linha central sai pela esquerda e a linha exibida pelo Automa entra pela direita, na mesma sequência.'
+      ? 'Sua linha central sai pela esquerda e a linha exibida pelo Automa entra pela direita.'
       : 'As peças saem pela esquerda e entram no próximo tanque na mesma sequência.';
     return `<section class="action-panel circulation-panel"><p class="phase-kicker">Fase da Correnteza</p><h2>As peças seguem a correnteza</h2><div class="flow-graphic"><span>◀</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><p>${description}</p></section>`;
   }
