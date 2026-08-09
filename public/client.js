@@ -794,7 +794,7 @@
         <div class="movement-progress" style="--progress:${totalMoves ? (completed / totalMoves) * 100 : 0}%"><span></span></div>
         <div class="movement-dots" style="--moves-count:${totalMoves}">${dots}</div>
         <p class="instruction">${instruction}</p>
-        <div class="coin-rule-note"><img src="${ASSETS.coin}" alt=""><span><strong>${state.constants.extraMoveCost} 3 moedas</strong> compram 1 movimento extra.</span></div>
+        <div class="coin-rule-note"><img src="${ASSETS.coin}" alt=""><span><strong>${state.constants.extraMoveCost} moedas</strong> compram 1 movimento extra.</span></div>
         ${!isCompactMobile() && canFinish ? '<button id="finishMovement" class="primary-button">Concluir movimentação</button>' : ''}
         ${!isCompactMobile() && current.movementReady && waitingForOtherPlayersMessage() ? '<button class="secondary-button try-next-phase" data-wait-phase="movement">Continuar para a próxima fase</button>' : ''}
         ${current.specialAlert ? `<p class="special-action-alert" role="status">${escapeHtml(current.specialAlert)}</p>` : ''}
