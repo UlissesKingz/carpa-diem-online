@@ -4,7 +4,7 @@ const ROWS = 5;
 const COLS = 7;
 const MIDDLE_ROW = 2;
 const CENTER = { row: 2, col: 3 };
-const MAX_ROUNDS = 6;
+const MAX_ROUNDS = 5;
 const MOVES_PER_ROUND = 12;
 const CIRCULATION_DURATION_MS = 5200;
 const EXTRA_MOVE_COST = 3;
@@ -13,6 +13,15 @@ const SPECIAL_TYPES = ['shoal', 'sturgeon', 'dojo', 'papaTerra'];
 const SPECIAL_PRIORITY = ['shoal', 'papaTerra', 'dojo', 'sturgeon'];
 const SPECIAL_COSTS = { shoal: 1, papaTerra: 0, dojo: 1, sturgeon: 2 };
 const SPECIAL_LABELS = { shoal: 'Tesourinhas', papaTerra: 'Papa-terra', dojo: 'Dojô', sturgeon: 'Esturjão' };
+
+const RULESETS = ['classic', 'advanced', 'kids'];
+const RULESET_LABELS = { classic: 'Intermediário', advanced: 'Avançado', kids: 'Kids' };
+const ADVANCED_TYPES = ['hook', 'net', 'heron', 'cat'];
+const ADVANCED_CELL_TYPES = ['hook', 'net'];
+const ADVANCED_OVERLAY_TYPES = ['heron', 'cat'];
+const ADVANCED_LABELS = { hook: 'Anzol', net: 'Rede', heron: 'Garça', cat: 'Gato' };
+const ADVANCED_PRIORITY = ['hook', 'net', 'heron', 'cat'];
+const AUTOMATIC_PRIORITY = [...ADVANCED_PRIORITY, ...SPECIAL_PRIORITY];
 
 function randomId(bytes = 8) {
   return crypto.randomBytes(bytes).toString('hex');
@@ -35,28 +44,101 @@ function shuffle(items) {
 }
 
 function createPiece(type, color = null) {
+  const isAdvancedCell = ADVANCED_CELL_TYPES.includes(type);
   return {
     id: randomId(5),
     type,
     ...(color ? { color } : {}),
-    rotation: crypto.randomInt(0, 4) * 90
+    rotation: isAdvancedCell ? 0 : crypto.randomInt(0, 4) * 90,
+    ...(isAdvancedCell ? { facing: 'left' } : {})
   };
 }
 
-function createInitialBoard(playerCount = 2, mode = 'multiplayer', specialTypesForBoard = null) {
+function createOverlay(type) {
+  return {
+    id: randomId(5),
+    type,
+    ...(ADVANCED_OVERLAY_TYPES.includes(type) ? { facing: 'left' } : {})
+  };
+}
+
+function normalizedRuleset(value) {
+  return RULESETS.includes(value) ? value : 'classic';
+}
+
+function chooseRandom(items) {
+  if (!items.length) return null;
+  return items[crypto.randomInt(0, items.length)];
+}
+
+function carpPositions(board, colors = null) {
+  const accepted = Array.isArray(colors) && colors.length ? new Set(colors) : null;
+  const positions = [];
+  for (let row = 0; row < ROWS; row += 1) {
+    for (let col = 0; col < COLS; col += 1) {
+      const piece = board[row][col];
+      if (piece?.type !== 'carp') continue;
+      if (accepted && !accepted.has(piece.color)) continue;
+      positions.push({ row, col });
+    }
+  }
+  return positions;
+}
+
+function plantPositions(board) {
+  const positions = [];
+  for (let row = 0; row < ROWS; row += 1) {
+    for (let col = 0; col < COLS; col += 1) {
+      if (board[row][col]?.type === 'algae') positions.push({ row, col });
+    }
+  }
+  return positions;
+}
+
+function addAdvancedPieceToBoard(board, type, replacementColors) {
+  if (!ADVANCED_TYPES.includes(type)) return null;
+
+  if (ADVANCED_CELL_TYPES.includes(type)) {
+    const candidates = carpPositions(board, replacementColors);
+    const position = chooseRandom(candidates);
+    if (!position) return null;
+    const piece = createPiece(type);
+    board[position.row][position.col] = piece;
+    return { type, position, pieceId: piece.id };
+  }
+
+  // Garça e Gato são uma camada extra e não substituem nenhuma das 35 casas.
+  // O preenchimento do tanque ocorre em ordem de leitura; por isso, a última
+  // planta encontrada é a última planta colocada no setup.
+  const plants = plantPositions(board);
+  const position = plants.at(-1) || null;
+  if (!position) return null;
+  const plant = board[position.row][position.col];
+  plant.overlays ||= [];
+  const overlay = createOverlay(type);
+  plant.overlays.push(overlay);
+  return { type, position, pieceId: plant.id, overlayId: overlay.id };
+}
+
+function createInitialBoard(playerCount = 2, mode = 'multiplayer', specialTypesForBoard = null, setup = {}) {
+  const ruleset = normalizedRuleset(setup.ruleset);
   const pieces = [];
   for (const color of COLORS) {
     for (let i = 0; i < 7; i += 1) pieces.push(createPiece('carp', color));
   }
 
-  const isTwoOrSolo = mode === 'solo' || playerCount === 2;
-  const algaeCount = isTwoOrSolo ? 4 : 5;
-  const fallbackSpecialCount = isTwoOrSolo ? 2 : 1;
-  const chosenSpecialTypes = Array.isArray(specialTypesForBoard) && specialTypesForBoard.length
-    ? [...specialTypesForBoard]
-    : shuffle(SPECIAL_TYPES).slice(0, fallbackSpecialCount);
-  for (let i = 0; i < algaeCount; i += 1) pieces.push(createPiece('algae'));
-  chosenSpecialTypes.forEach((type) => pieces.push(createPiece(type)));
+  if (ruleset === 'kids') {
+    for (let i = 0; i < 6; i += 1) pieces.push(createPiece('algae'));
+  } else {
+    const isTwoOrSolo = mode === 'solo' || playerCount === 2;
+    const algaeCount = isTwoOrSolo ? 4 : 5;
+    const fallbackSpecialCount = isTwoOrSolo ? 2 : 1;
+    const chosenSpecialTypes = Array.isArray(specialTypesForBoard) && specialTypesForBoard.length
+      ? [...specialTypesForBoard]
+      : shuffle(SPECIAL_TYPES).slice(0, fallbackSpecialCount);
+    for (let i = 0; i < algaeCount; i += 1) pieces.push(createPiece('algae'));
+    chosenSpecialTypes.forEach((type) => pieces.push(createPiece(type)));
+  }
 
   const shuffled = shuffle(pieces);
   const board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
@@ -67,11 +149,20 @@ function createInitialBoard(playerCount = 2, mode = 'multiplayer', specialTypesF
       board[row][col] = shuffled[cursor++];
     }
   }
+
+  if (ruleset === 'advanced' && ADVANCED_TYPES.includes(setup.advancedType)) {
+    addAdvancedPieceToBoard(board, setup.advancedType, setup.advancedReplacementColors || null);
+  }
+
   return board;
 }
 
 function clonePiece(piece) {
-  return piece ? { ...piece } : null;
+  if (!piece) return null;
+  return {
+    ...piece,
+    ...(Array.isArray(piece.overlays) ? { overlays: piece.overlays.map((overlay) => ({ ...overlay })) } : {})
+  };
 }
 
 function cloneBoard(board) {
@@ -87,7 +178,11 @@ function snapshotMovementState(player) {
     movementReady: player.movementReady,
     lastMovedPieceId: player.lastMovedPieceId,
     extraMovesPurchased: player.extraMovesPurchased,
-    specialAlert: player.specialAlert || ''
+    specialAlert: player.specialAlert || '',
+    advancedTrapArmed: (player.advancedTrapArmed || []).map((trap) => ({
+      ...trap,
+      position: trap.position ? { ...trap.position } : null
+    }))
   };
 }
 
@@ -100,6 +195,10 @@ function restoreMovementState(player, snapshot) {
   player.movementReady = snapshot.movementReady;
   player.lastMovedPieceId = snapshot.lastMovedPieceId;
   player.specialAlert = snapshot.specialAlert || '';
+  player.advancedTrapArmed = (snapshot.advancedTrapArmed || []).map((trap) => ({
+    ...trap,
+    position: trap.position ? { ...trap.position } : null
+  }));
 }
 
 function findEmpty(board) {
@@ -153,6 +252,40 @@ function orientPieceForCurrent(piece) {
   return { fromRotation, toRotation, oriented: true };
 }
 
+
+function advancedFacingTowardEmpty(position, empty, currentFacing = 'left') {
+  // As artes avançadas nunca giram: o lado esquerdo do PNG é a frente.
+  // Só espelhamos horizontalmente quando o vazio surge na mesma linha.
+  // Se o vazio estiver acima/abaixo (ou em outra linha), preservamos a última orientação.
+  if (!position || !empty || position.row !== empty.row || position.col === empty.col) {
+    return currentFacing === 'right' ? 'right' : 'left';
+  }
+  return empty.col < position.col ? 'left' : 'right';
+}
+
+function orientAdvancedPiecesTowardEmpty(board, empty = findEmpty(board)) {
+  if (!board || !empty) return;
+  for (let row = 0; row < ROWS; row += 1) {
+    for (let col = 0; col < COLS; col += 1) {
+      const piece = board[row][col];
+      if (!piece) continue;
+      const position = { row, col };
+
+      if (ADVANCED_CELL_TYPES.includes(piece.type)) {
+        piece.rotation = 0;
+        piece.facing = advancedFacingTowardEmpty(position, empty, piece.facing);
+      }
+
+      if (piece.type === 'algae' && Array.isArray(piece.overlays)) {
+        for (const overlay of piece.overlays) {
+          if (!ADVANCED_OVERLAY_TYPES.includes(overlay.type)) continue;
+          overlay.facing = advancedFacingTowardEmpty(position, empty, overlay.facing);
+        }
+      }
+    }
+  }
+}
+
 function adjacentPositions(position) {
   return [
     { row: position.row - 1, col: position.col },
@@ -166,7 +299,7 @@ function pieceName(piece) {
   if (!piece) return 'peça';
   if (piece.type === 'carp') return `carpa ${labelColor(piece.color)}`;
   if (piece.type === 'algae') return 'planta';
-  return SPECIAL_LABELS[piece.type] || 'peça especial';
+  return SPECIAL_LABELS[piece.type] || ADVANCED_LABELS[piece.type] || 'peça especial';
 }
 
 function findPiecePosition(board, type) {
@@ -186,6 +319,202 @@ function sameDiagonal(a, b) {
 
 function sameOrthogonalLine(a, b) {
   return (a.row === b.row || a.col === b.col) && !(a.row === b.row && a.col === b.col);
+}
+
+function positionsBetween(a, b) {
+  if (!sameOrthogonalLine(a, b)) return [];
+  const rowStep = Math.sign(b.row - a.row);
+  const colStep = Math.sign(b.col - a.col);
+  const result = [];
+  let row = a.row + rowStep;
+  let col = a.col + colStep;
+  while (!(row === b.row && col === b.col)) {
+    result.push({ row, col });
+    row += rowStep;
+    col += colStep;
+  }
+  return result;
+}
+
+function hookSourceForCarpMove(board, from, empty, preferredColor) {
+  const movingPiece = board[from.row]?.[from.col];
+  if (movingPiece?.type !== 'carp' || movingPiece.color !== preferredColor) return null;
+  if (!isOrthogonallyAdjacent(from, empty)) return null;
+
+  for (const hookPosition of adjacentPositions(from)) {
+    if (board[hookPosition.row]?.[hookPosition.col]?.type !== 'hook') continue;
+    const rowStep = from.row - hookPosition.row;
+    const colStep = from.col - hookPosition.col;
+    const expectedEmpty = { row: from.row + rowStep, col: from.col + colStep };
+    if (expectedEmpty.row === empty.row && expectedEmpty.col === empty.col) return { ...hookPosition };
+  }
+  return null;
+}
+
+function isValidManualMove(player, from, empty) {
+  const piece = player.board[from.row]?.[from.col];
+  if (!piece) return false;
+  return isOrthogonallyAdjacent(from, empty);
+}
+
+function manualMovePositions(player) {
+  return adjacentPositions(findEmpty(player.board));
+}
+
+function leastPresentReplacementColor(board, preferredColor) {
+  const counts = countCarps(board);
+  const candidates = COLORS
+    .filter((color) => color !== preferredColor)
+    .map((color) => ({ color, count: Number(counts[color] || 0) }));
+  const minimum = Math.min(...candidates.map(({ count }) => count));
+  return chooseRandom(candidates.filter(({ count }) => count === minimum).map(({ color }) => color));
+}
+
+function capturePreferredCarp(board, position, preferredColor, sources = []) {
+  const piece = board[position.row]?.[position.col];
+  if (piece?.type !== 'carp' || piece.color !== preferredColor) return null;
+  const replacementColor = leastPresentReplacementColor(board, preferredColor);
+  if (!replacementColor) return null;
+  const replacement = createPiece('carp', replacementColor);
+  board[position.row][position.col] = replacement;
+  return {
+    position: { ...position },
+    capturedPieceId: piece.id,
+    capturedColor: preferredColor,
+    replacementPieceId: replacement.id,
+    replacementColor,
+    sources: [...sources]
+  };
+}
+
+function netAdjacentTo(board, position) {
+  return adjacentPositions(position).some(({ row, col }) => board[row][col]?.type === 'net');
+}
+
+function overlayEntries(board) {
+  const entries = [];
+  for (let row = 0; row < ROWS; row += 1) {
+    for (let col = 0; col < COLS; col += 1) {
+      const piece = board[row][col];
+      if (piece?.type !== 'algae' || !Array.isArray(piece.overlays)) continue;
+      piece.overlays.forEach((overlay) => entries.push({ overlay, position: { row, col }, plant: piece }));
+    }
+  }
+  return entries;
+}
+
+function predatorJumpCandidate(board, targetPosition, type) {
+  const targetPlant = board[targetPosition.row]?.[targetPosition.col];
+  if (targetPlant?.type !== 'algae') return null;
+
+  return overlayEntries(board)
+    .filter(({ position, overlay }) =>
+      overlay.type === type
+      && !(position.row === targetPosition.row && position.col === targetPosition.col)
+    )
+    .find(({ position }) => (
+      type === 'heron'
+        ? sameDiagonal(position, targetPosition)
+        : type === 'cat'
+          ? sameOrthogonalLine(position, targetPosition)
+          : false
+    )) || null;
+}
+
+function movePredatorOverlayToPlant(board, targetPosition, type) {
+  const targetPlant = board[targetPosition.row]?.[targetPosition.col];
+  const entry = predatorJumpCandidate(board, targetPosition, type);
+  if (!targetPlant || !entry) return null;
+
+  targetPlant.overlays ||= [];
+  entry.plant.overlays = (entry.plant.overlays || []).filter((overlay) => overlay.id !== entry.overlay.id);
+  targetPlant.overlays.push(entry.overlay);
+  return {
+    type,
+    overlayId: entry.overlay.id,
+    from: { ...entry.position },
+    to: { ...targetPosition }
+  };
+}
+
+function armedPredatorCaptureCandidate(board, destination, armedPredators, type) {
+  return (armedPredators || []).find((trap) => {
+    if (trap?.type !== type || !trap.position || !isOrthogonallyAdjacent(trap.position, destination)) return false;
+    const plant = board[trap.position.row]?.[trap.position.col];
+    return plant?.type === 'algae'
+      && (plant.overlays || []).some((overlay) => overlay.id === trap.overlayId && overlay.type === type);
+  }) || null;
+}
+
+function detectAdvancedTrigger(boardBefore, boardAfter, piece, from, destination, preferredColor, armedPredators = []) {
+  if (piece?.type === 'carp' && piece.color === preferredColor) {
+    const hookSource = hookSourceForCarpMove(boardBefore, from, destination, preferredColor);
+    if (hookSource) return { type: 'hook', kind: 'capture', sourcePosition: hookSource };
+
+    if (netAdjacentTo(boardAfter, destination)) return { type: 'net', kind: 'capture' };
+
+    for (const type of ['heron', 'cat']) {
+      const trap = armedPredatorCaptureCandidate(boardAfter, destination, armedPredators, type);
+      if (trap) return { type, kind: 'capture', trap };
+    }
+  }
+
+  if (piece?.type === 'algae') {
+    for (const type of ['heron', 'cat']) {
+      const candidate = predatorJumpCandidate(boardAfter, destination, type);
+      if (candidate) return { type, kind: 'jump' };
+    }
+  }
+
+  return null;
+}
+
+function applyAdvancedTrigger(board, trigger, destination, preferredColor) {
+  if (!trigger) return { captures: [], jumps: [], armed: [] };
+
+  if (trigger.kind === 'capture') {
+    const capture = capturePreferredCarp(board, destination, preferredColor, [trigger.type]);
+    return { captures: capture ? [capture] : [], jumps: [], armed: [] };
+  }
+
+  if (trigger.kind === 'jump') {
+    const jump = movePredatorOverlayToPlant(board, destination, trigger.type);
+    return {
+      captures: [],
+      jumps: jump ? [jump] : [],
+      armed: jump ? [{
+        type: jump.type,
+        overlayId: jump.overlayId,
+        position: { ...jump.to }
+      }] : []
+    };
+  }
+
+  return { captures: [], jumps: [], armed: [] };
+}
+
+function advancedTypesOnBoard(board) {
+  const found = new Set();
+  for (const piece of board.flat()) {
+    if (!piece) continue;
+    if (ADVANCED_CELL_TYPES.includes(piece.type)) found.add(piece.type);
+    for (const overlay of piece.overlays || []) {
+      if (ADVANCED_OVERLAY_TYPES.includes(overlay.type)) found.add(overlay.type);
+    }
+  }
+  return found;
+}
+
+function advancedTypesInLine(line) {
+  const found = new Set();
+  for (const piece of line || []) {
+    if (!piece) continue;
+    if (ADVANCED_CELL_TYPES.includes(piece.type)) found.add(piece.type);
+    for (const overlay of piece.overlays || []) {
+      if (ADVANCED_OVERLAY_TYPES.includes(overlay.type)) found.add(overlay.type);
+    }
+  }
+  return [...found];
 }
 
 function detectSpecialTrigger(board, emptyPosition, { excludePieceId = null } = {}) {
@@ -225,7 +554,7 @@ function hasValidMovementOption(player) {
   const board = player.board;
   const empty = findEmpty(board);
 
-  for (const from of adjacentPositions(empty)) {
+  for (const from of manualMovePositions(player)) {
     const piece = board[from.row][from.col];
     if (!piece) continue;
     if (player.mustMoveCarp && piece.type !== 'carp') continue;
@@ -234,8 +563,17 @@ function hasValidMovementOption(player) {
     projected[empty.row][empty.col] = clonePiece(piece);
     projected[from.row][from.col] = null;
 
+    const advancedTrigger = detectAdvancedTrigger(
+      board,
+      projected,
+      piece,
+      from,
+      empty,
+      player.color,
+      player.advancedTrapArmed || []
+    );
     const manuallyMovedSpecial = SPECIAL_TYPES.includes(piece.type);
-    const specialTrigger = detectSpecialTrigger(projected, from, {
+    const specialTrigger = advancedTrigger ? null : detectSpecialTrigger(projected, from, {
       excludePieceId: manuallyMovedSpecial ? piece.id : null
     });
     const createsCarpObligation = piece.type === 'algae';
@@ -302,10 +640,10 @@ function applySpecialTrigger(board, trigger) {
   }
 
   const messages = {
-    shoal: 'Tesourinhas ocuparam o espaço vazio e consumiram 1 movimento.',
-    dojo: 'Dojô atravessou o tanque pela diagonal e consumiu 1 movimento.',
-    papaTerra: `Papa-terra trocou de posição com ${pieceName(board[trigger.position.row][trigger.position.col])}. Nenhum movimento foi consumido.`,
-    sturgeon: `Esturjão empurrou ${affectedCount} peça(s) e consumiu 2 movimentos.`
+    shoal: 'Ativação automática — Tesourinhas: o novo vazio ficou ortogonalmente adjacente a elas. Tesourinhas ocuparam o espaço vazio e consumiram 1 movimento.',
+    dojo: 'Ativação automática — Dojô: o novo vazio ficou na mesma diagonal. Dojô atravessou o tanque até o vazio e consumiu 1 movimento.',
+    papaTerra: `Ativação automática — Papa-terra: o novo vazio ficou a duas casas em linha reta, com uma peça entre eles. Papa-terra trocou de posição com ${pieceName(board[trigger.position.row][trigger.position.col])} e nenhum movimento foi consumido.`,
+    sturgeon: `Ativação automática — Esturjão: o novo vazio ficou na mesma linha ou coluna. Esturjão empurrou ${affectedCount} peça(s) em direção ao vazio e consumiu 2 movimentos.`
   };
   return {
     type: trigger.type,
@@ -323,22 +661,53 @@ function specialTypesOnBoard(board) {
 }
 
 function generateAutomaLine(room, player) {
-  const cooldown = room.solo.specialCooldown;
-  const unavailable = specialTypesOnBoard(player.board);
   const pool = [];
   for (const color of COLORS) {
     if (color === player.color) continue;
     for (let i = 0; i < 7; i += 1) pool.push({ type: 'carp', color });
   }
-  for (let i = 0; i < 4; i += 1) pool.push({ type: 'algae' });
-  for (const type of SPECIAL_TYPES) {
-    if (!unavailable.has(type) && Number(cooldown[type] || 0) <= 0) pool.push({ type });
+
+  const ruleset = normalizedRuleset(room.ruleset);
+  const algaeCopies = ruleset === 'kids' ? 6 : 4;
+  for (let i = 0; i < algaeCopies; i += 1) pool.push({ type: 'algae' });
+
+  if (ruleset !== 'kids') {
+    const cooldown = room.solo.specialCooldown;
+    const unavailable = specialTypesOnBoard(player.board);
+    for (const type of SPECIAL_TYPES) {
+      if (!unavailable.has(type) && Number(cooldown[type] || 0) <= 0) pool.push({ type });
+    }
+    for (const type of SPECIAL_TYPES) cooldown[type] = Math.max(0, Number(cooldown[type] || 0) - 1);
   }
 
   const selected = shuffle(pool).slice(0, COLS).map((definition) => createPiece(definition.type, definition.color || null));
   room.solo.automaLine = selected;
-  for (const type of SPECIAL_TYPES) cooldown[type] = Math.max(0, Number(cooldown[type] || 0) - 1);
   return selected;
+}
+
+function tryReturnSoloAdvancedPiece(room, player) {
+  if (room.mode !== 'solo' || normalizedRuleset(room.ruleset) !== 'advanced') return null;
+  const returnRound = Number(room.solo?.advancedReturnRound || 0);
+  if (!returnRound || room.round < returnRound) return null;
+  if (advancedTypesOnBoard(player.board).size > 0) {
+    room.solo.advancedReturnRound = null;
+    return null;
+  }
+  const replacementColors = COLORS.filter((color) => color !== player.color);
+  let inserted = null;
+  let type = null;
+  for (const candidateType of shuffle(ADVANCED_TYPES)) {
+    inserted = addAdvancedPieceToBoard(player.board, candidateType, replacementColors);
+    if (inserted) {
+      type = candidateType;
+      break;
+    }
+  }
+  if (!inserted || !type) return null;
+  room.solo.advancedReturnRound = null;
+  room.solo.advancedType = type;
+  addLog(room, `${ADVANCED_LABELS[type]} entrou no tanque no início da rodada ${room.round}.`, player.id);
+  return inserted;
 }
 
 function countCarps(board) {
@@ -450,6 +819,7 @@ function createPlayer({ name, color, socketId, rankingPlayerId }) {
     coins: 0,
     extraMovesPurchased: 0,
     specialAlert: '',
+    advancedTrapArmed: [],
     discard: Object.fromEntries(COLORS.map((item) => [item, 0]))
   };
 }
@@ -465,6 +835,10 @@ function createSpectator({ name, socketId }) {
 }
 
 function buildInitialSpecialAssignments(room) {
+  if (normalizedRuleset(room.ruleset) === 'kids') {
+    return Object.fromEntries(room.playerOrder.map((id) => [id, []]));
+  }
+
   const playerCount = room.playerOrder.length;
   const specialsPerPlayer = room.mode === 'solo' || playerCount === 2 ? 2 : 1;
   const shuffled = shuffle(SPECIAL_TYPES);
@@ -487,11 +861,45 @@ function buildInitialSpecialAssignments(room) {
   return assignments;
 }
 
-function createRoom({ hostName, color, socketId, mode = 'multiplayer', rankingPlayerId }) {
+function buildInitialAdvancedAssignments(room) {
+  const assignments = {};
+  if (normalizedRuleset(room.ruleset) !== 'advanced') return assignments;
+  const shuffled = shuffle(ADVANCED_TYPES);
+  room.playerOrder.forEach((id, index) => {
+    assignments[id] = shuffled[index % shuffled.length];
+  });
+  return assignments;
+}
+
+function advancedReplacementColorsForPlayer(room, playerId) {
+  const player = room.players[playerId];
+  if (!player) return [];
+  if (room.mode === 'solo') return COLORS.filter((color) => color !== player.color);
+
+  const preferred = new Set(room.playerOrder.map((id) => room.players[id]?.color).filter(Boolean));
+  if (room.playerOrder.length <= 3) return COLORS.filter((color) => !preferred.has(color));
+
+  const index = room.playerOrder.indexOf(playerId);
+  const oppositeId = room.playerOrder[(index + 2) % 4];
+  return room.players[oppositeId]?.color ? [room.players[oppositeId].color] : [];
+}
+
+function setGameRuleset(room, requesterId, ruleset) {
+  if (room.hostId !== requesterId) throw new Error('Somente o anfitrião pode escolher o modo de regras.');
+  if (room.status !== 'lobby') throw new Error('O modo de regras só pode ser alterado antes da partida.');
+  const normalized = normalizedRuleset(ruleset);
+  room.ruleset = normalized;
+  setAction(room, { type: 'rulesetChanged', playerId: requesterId, ruleset: normalized });
+  addLog(room, `escolheu o modo ${RULESET_LABELS[normalized]}.`, requesterId);
+  return normalized;
+}
+
+function createRoom({ hostName, color, socketId, mode = 'multiplayer', rankingPlayerId, ruleset = 'classic' }) {
   const host = createPlayer({ name: hostName, color, socketId, rankingPlayerId });
   const room = {
     code: roomCode(),
     mode: mode === 'solo' ? 'solo' : 'multiplayer',
+    ruleset: normalizedRuleset(ruleset),
     status: 'lobby',
     phase: 'lobby',
     round: 0,
@@ -569,7 +977,18 @@ function removeMember(room, memberId, role) {
 }
 
 function resetPlayerForRound(player, initializeBoard = false, setup = {}) {
-  if (initializeBoard) player.board = createInitialBoard(setup.playerCount || 2, setup.mode || 'multiplayer', setup.specialTypes || null);
+  if (initializeBoard) {
+    player.board = createInitialBoard(
+      setup.playerCount || 2,
+      setup.mode || 'multiplayer',
+      setup.specialTypes || null,
+      {
+        ruleset: setup.ruleset,
+        advancedType: setup.advancedType,
+        advancedReplacementColors: setup.advancedReplacementColors
+      }
+    );
+  }
   player.movesRemaining = MOVES_PER_ROUND;
   player.mustMoveCarp = false;
   player.correctionRequired = false;
@@ -580,9 +999,11 @@ function resetPlayerForRound(player, initializeBoard = false, setup = {}) {
   player.development = null;
   player.extraMovesPurchased = 0;
   player.specialAlert = '';
+  player.advancedTrapArmed = [];
 }
 
 function initializeMatch(room, restarted = false) {
+  room.ruleset = normalizedRuleset(room.ruleset);
   room.status = 'playing';
   room.phase = 'movement';
   room.round = 1;
@@ -597,22 +1018,33 @@ function initializeMatch(room, restarted = false) {
   room.solo = room.mode === 'solo' ? {
     exitedPreferred: 0,
     automaLine: null,
-    specialCooldown: Object.fromEntries(SPECIAL_TYPES.map((type) => [type, 0]))
+    specialCooldown: Object.fromEntries(SPECIAL_TYPES.map((type) => [type, 0])),
+    advancedReturnRound: null,
+    advancedType: null
   } : null;
+
   const specialAssignments = buildInitialSpecialAssignments(room);
+  const advancedAssignments = buildInitialAdvancedAssignments(room);
+
   for (const id of room.playerOrder) {
     const player = room.players[id];
     player.discard = Object.fromEntries(COLORS.map((item) => [item, 0]));
     player.coins = 0;
+    const advancedType = advancedAssignments[id] || null;
     resetPlayerForRound(player, true, {
       playerCount: room.playerOrder.length,
       mode: room.mode,
-      specialTypes: specialAssignments[id] || null
+      ruleset: room.ruleset,
+      specialTypes: specialAssignments[id] || null,
+      advancedType,
+      advancedReplacementColors: advancedReplacementColorsForPlayer(room, id)
     });
+    if (room.mode === 'solo' && advancedType) room.solo.advancedType = advancedType;
   }
+
   if (room.mode === 'solo') generateAutomaLine(room, room.players[room.playerOrder[0]]);
-  setAction(room, { type: restarted ? 'restartComplete' : 'gameStart' });
-  addLog(room, restarted ? 'A partida foi reiniciada por acordo dos jogadores.' : 'A partida começou.');
+  setAction(room, { type: restarted ? 'restartComplete' : 'gameStart', ruleset: room.ruleset });
+  addLog(room, restarted ? 'A partida foi reiniciada por acordo dos jogadores.' : `A partida começou no modo ${RULESET_LABELS[room.ruleset]}.`);
 }
 
 function startGame(room, requesterId) {
@@ -683,21 +1115,48 @@ function movePiece(room, playerId, from) {
   const empty = findEmpty(board);
   const piece = board[from.row][from.col];
   if (!piece) throw new Error('Escolha uma peça.');
-  if (!isOrthogonallyAdjacent(from, empty)) throw new Error('A peça deve estar ao lado do espaço vazio.');
+  if (!isValidManualMove(player, from, empty)) {
+    throw new Error('A peça deve estar ao lado do espaço vazio.');
+  }
+
+  const pendingPredators = (player.advancedTrapArmed || []).map((trap) => ({
+    ...trap,
+    position: trap.position ? { ...trap.position } : null
+  }));
 
   if (player.correctionRequired) {
     const validCorrection = from.col === empty.col && Math.abs(from.row - empty.row) === 1 && from.row !== MIDDLE_ROW;
     if (!validCorrection) throw new Error('Preencha a linha central usando a peça imediatamente acima ou abaixo.');
     player.movementHistory.push(snapshotMovementState(player));
+    player.advancedTrapArmed = [];
+    const boardBefore = cloneBoard(board);
     const orientation = orientPieceForMovement(piece, from, empty);
     board[empty.row][empty.col] = piece;
     board[from.row][from.col] = null;
+
+    const advancedTrigger = detectAdvancedTrigger(boardBefore, board, piece, from, empty, player.color, pendingPredators);
+    const advanced = applyAdvancedTrigger(board, advancedTrigger, empty, player.color);
+    player.advancedTrapArmed = advanced.armed;
+    orientAdvancedPiecesTowardEmpty(board, findEmpty(board));
+
     player.correctionRequired = false;
-    player.lastMovedPieceId = piece.id;
-    player.specialAlert = '';
-    setAction(room, { type: 'correctionMove', playerId, from: { ...from }, to: { ...empty }, pieceId: piece.id, ...orientation });
+    player.lastMovedPieceId = advanced.captures[0]?.replacementPieceId || piece.id;
+    const advancedMessage = advancedActivationMessage(advanced);
+    player.specialAlert = advancedMessage;
+    if (advancedMessage) addLog(room, advancedMessage, playerId);
+    setAction(room, {
+      type: 'correctionMove',
+      playerId,
+      from: { ...from },
+      to: { ...empty },
+      pieceId: piece.id,
+      pieceType: piece.type,
+      movedOverlayTypes: (piece.overlays || []).map((overlay) => overlay.type),
+      ...orientation,
+      advanced
+    });
     addLog(room, 'retirou o vazio da linha central.', playerId);
-    return { correction: true, specialMoved: false };
+    return { correction: true, specialMoved: false, advanced };
   }
 
   if (player.movesRemaining <= 0) throw new Error('Seus movimentos disponíveis terminaram. Compre um movimento extra ou conclua a fase.');
@@ -706,8 +1165,17 @@ function movePiece(room, playerId, from) {
   const projected = cloneBoard(board);
   projected[empty.row][empty.col] = clonePiece(piece);
   projected[from.row][from.col] = null;
+  const advancedTriggerPreview = detectAdvancedTrigger(
+    board,
+    projected,
+    piece,
+    from,
+    empty,
+    player.color,
+    pendingPredators
+  );
   const manuallyMovedSpecial = SPECIAL_TYPES.includes(piece.type);
-  const specialTrigger = detectSpecialTrigger(projected, from, {
+  const specialTrigger = advancedTriggerPreview ? null : detectSpecialTrigger(projected, from, {
     excludePieceId: manuallyMovedSpecial ? piece.id : null
   });
   const createsCarpObligation = piece.type === 'algae';
@@ -721,6 +1189,9 @@ function movePiece(room, playerId, from) {
 
   player.movementHistory.push(snapshotMovementState(player));
   player.specialAlert = '';
+  player.advancedTrapArmed = [];
+
+  const boardBefore = cloneBoard(board);
   const fulfillsCarpObligation = player.mustMoveCarp && piece.type === 'carp';
   const orientation = orientPieceForMovement(piece, from, empty);
   board[empty.row][empty.col] = piece;
@@ -729,39 +1200,97 @@ function movePiece(room, playerId, from) {
   if (fulfillsCarpObligation) player.mustMoveCarp = false;
   if (createsCarpObligation) player.mustMoveCarp = true;
 
+  // Hierarquia automática: Anzol → Rede → Garça → Gato → especiais.
+  // Se uma avançada é ativada, nenhuma especial é ativada pelo mesmo novo vazio.
+  const advancedTrigger = detectAdvancedTrigger(
+    boardBefore,
+    board,
+    piece,
+    from,
+    empty,
+    player.color,
+    pendingPredators
+  );
+  const advancedAction = applyAdvancedTrigger(board, advancedTrigger, empty, player.color);
+  player.advancedTrapArmed = advancedAction.armed;
+
   let specialAction = null;
-  const trigger = detectSpecialTrigger(board, findEmpty(board), {
-    excludePieceId: manuallyMovedSpecial ? piece.id : null
-  });
-  if (trigger) {
-    specialAction = applySpecialTrigger(board, trigger);
-    player.movesRemaining -= specialAction.cost;
-    player.specialAlert = specialAction.message;
-    addLog(room, specialAction.message, playerId);
+  if (!advancedTrigger) {
+    const trigger = detectSpecialTrigger(board, findEmpty(board), {
+      excludePieceId: manuallyMovedSpecial ? piece.id : null
+    });
+    if (trigger) {
+      specialAction = applySpecialTrigger(board, trigger);
+      player.movesRemaining -= specialAction.cost;
+      addLog(room, specialAction.message, playerId);
+    }
   }
+
+  orientAdvancedPiecesTowardEmpty(board, findEmpty(board));
+
+  const advancedMessage = advancedActivationMessage(advancedAction);
+  player.specialAlert = advancedMessage || specialAction?.message || '';
+  if (advancedMessage) addLog(room, advancedMessage, playerId);
 
   if (player.movesRemaining === 0) {
     const finalEmpty = findEmpty(board);
     player.correctionRequired = finalEmpty.row === MIDDLE_ROW;
   }
 
-  player.lastMovedPieceId = specialAction?.pieceId || piece.id;
+  const lastCapture = advancedAction.captures.at(-1);
+  player.lastMovedPieceId = specialAction?.pieceId || lastCapture?.replacementPieceId || piece.id;
   setAction(room, {
     type: 'move',
     playerId,
     from: { ...from },
     to: { ...empty },
     pieceId: piece.id,
+    pieceType: piece.type,
+    movedOverlayTypes: (piece.overlays || []).map((overlay) => overlay.type),
     ...orientation,
-    special: specialAction
+    special: specialAction,
+    advanced: advancedAction
   });
+
   const moveLimit = MOVES_PER_ROUND + player.extraMovesPurchased;
-  if (createsCarpObligation && !specialAction) {
+  if (createsCarpObligation && !specialAction && !advancedMessage) {
     addLog(room, 'moveu uma alga sem gastar movimento; agora deve mover uma carpa.', playerId);
-  } else if (!specialAction) {
+  } else if (!specialAction && !advancedMessage) {
     addLog(room, `realizou o movimento ${moveLimit - player.movesRemaining}/${moveLimit}.`, playerId);
   }
-  return { correction: false, specialMoved: Boolean(specialAction), specialType: specialAction?.type || null };
+
+  return {
+    correction: false,
+    specialMoved: Boolean(specialAction),
+    specialType: specialAction?.type || null,
+    advanced: advancedAction
+  };
+}
+
+function advancedCaptureMessage(capture) {
+  const source = capture.sources?.[0];
+  const replacement = `Ela foi substituída por uma carpa ${labelColor(capture.replacementColor)}.`;
+  const explanations = {
+    hook: `Ativação automática — Anzol: sua carpa preferida estava adjacente ao Anzol, entre ele e o vazio, e foi movida para esse vazio, afastando-se do Anzol. A carpa foi capturada. ${replacement}`,
+    net: `Ativação automática — Rede: sua carpa preferida terminou o movimento ortogonalmente adjacente à Rede. A carpa foi capturada. ${replacement}`,
+    heron: `Ativação automática — Garça: após a emboscada, sua carpa preferida foi movida para o vazio adjacente à planta onde a Garça estava. A carpa foi capturada. ${replacement}`,
+    cat: `Ativação automática — Gato: após a emboscada, sua carpa preferida foi movida para o vazio adjacente à planta onde o Gato estava. A carpa foi capturada. ${replacement}`
+  };
+  return explanations[source] || `Ativação automática — peça avançada: uma carpa preferida foi capturada. ${replacement}`;
+}
+
+function advancedActivationMessage(advancedAction) {
+  if (advancedAction?.captures?.length) return advancedCaptureMessage(advancedAction.captures[0]);
+  const jump = advancedAction?.jumps?.[0];
+  if (!jump) return '';
+
+  if (jump.type === 'heron') {
+    return 'Ativação automática — Garça: a planta movida terminou na mesma diagonal da Garça. A Garça saltou para essa planta e ficou de tocaia: se a próxima jogada mover sua carpa preferida para o vazio adjacente a essa planta, ela será capturada.';
+  }
+  if (jump.type === 'cat') {
+    return 'Ativação automática — Gato: a planta movida terminou na mesma linha ou coluna do Gato. O Gato saltou para essa planta e ficou de tocaia: se a próxima jogada mover sua carpa preferida para o vazio adjacente a essa planta, ela será capturada.';
+  }
+  return '';
 }
 
 function undoLastMove(room, playerId) {
@@ -953,7 +1482,11 @@ function finishDevelopmentAndAdvance(room) {
   room.round += 1;
   room.phase = 'movement';
   for (const id of room.playerOrder) resetPlayerForRound(room.players[id], false);
-  if (room.mode === 'solo') generateAutomaLine(room, room.players[room.playerOrder[0]]);
+  if (room.mode === 'solo') {
+    const soloPlayer = room.players[room.playerOrder[0]];
+    tryReturnSoloAdvancedPiece(room, soloPlayer);
+    generateAutomaLine(room, soloPlayer);
+  }
   setAction(room, { type: 'phaseChange', phase: 'movement', round: room.round });
   addLog(room, `Rodada ${room.round} iniciada.`);
 }
@@ -969,13 +1502,20 @@ function beginCirculation(room) {
     const playerId = room.playerOrder[0];
     const player = room.players[playerId];
     player.lastMovedPieceId = null;
-    player.board[MIDDLE_ROW].forEach((piece) => {
+    const soloOutgoingLine = player.board[MIDDLE_ROW];
+    soloOutgoingLine.forEach((piece) => {
       const turn = orientPieceForCurrent(piece);
       if (turn) turns[piece.id] = turn;
       if (piece?.type === 'carp' && piece.color === player.color) room.solo.exitedPreferred += 1;
       if (piece && SPECIAL_TYPES.includes(piece.type)) room.solo.specialCooldown[piece.type] = 1;
     });
-    outgoing[playerId] = player.board[MIDDLE_ROW].map(clonePiece);
+    const exitedAdvanced = advancedTypesInLine(soloOutgoingLine);
+    if (normalizedRuleset(room.ruleset) === 'advanced' && exitedAdvanced.length) {
+      room.solo.advancedReturnRound = room.round + 1;
+      room.solo.advancedType = null;
+      addLog(room, `${exitedAdvanced.map((type) => ADVANCED_LABELS[type]).join(' e ')} saiu do tanque. Uma nova peça avançada poderá entrar no início da próxima rodada.`, playerId);
+    }
+    outgoing[playerId] = soloOutgoingLine.map(clonePiece);
     routes.push({ senderId: playerId, receiverId: 'automa' });
   } else {
     for (let index = 0; index < room.playerOrder.length; index += 1) {
@@ -1129,6 +1669,7 @@ function publicRoom(room) {
   return {
     code: room.code,
     mode: room.mode || 'multiplayer',
+    ruleset: normalizedRuleset(room.ruleset),
     status: room.status,
     phase: room.phase,
     round: room.round,
@@ -1164,7 +1705,9 @@ function publicRoom(room) {
     solo: room.mode === 'solo' && room.solo ? {
       exitedPreferred: room.solo.exitedPreferred,
       automaLine: room.solo.automaLine,
-      specialCooldown: room.solo.specialCooldown
+      specialCooldown: room.solo.specialCooldown,
+      advancedReturnRound: room.solo.advancedReturnRound || null,
+      advancedType: room.solo.advancedType || null
     } : null,
     constants: {
       rows: ROWS,
@@ -1175,7 +1718,10 @@ function publicRoom(room) {
       circulationDurationMs: CIRCULATION_DURATION_MS,
       extraMoveCost: EXTRA_MOVE_COST,
       colors: COLORS,
-      specialTypes: SPECIAL_TYPES
+      specialTypes: SPECIAL_TYPES,
+      advancedTypes: ADVANCED_TYPES,
+      automaticPriority: AUTOMATIC_PRIORITY,
+      rulesets: RULESETS
     }
   };
 }
@@ -1183,10 +1729,13 @@ function publicRoom(room) {
 module.exports = {
   COLORS,
   SPECIAL_TYPES,
+  ADVANCED_TYPES,
+  RULESETS,
   createRoom,
   addPlayer,
   addSpectator,
   removeMember,
+  setGameRuleset,
   startGame,
   requestRestart,
   respondRestart,

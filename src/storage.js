@@ -12,6 +12,9 @@ let serverInstanceId = null;
 const roomWriteQueues = new Map();
 
 const RANKING_MODES = ['solo', '2', '3', '4'];
+// Nova temporada de ranking após a redução da partida para 5 rodadas.
+// Alterar esta chave no futuro permite reiniciar os recordes sem misturar regras antigas.
+const RANKING_VERSION = '5-rounds-v1';
 
 function rankingModeForRoom(room) {
   if (room?.mode === 'solo') return 'solo';
@@ -208,6 +211,7 @@ function buildMatchRecord(room) {
     matchId: room.matchId,
     roomCode: room.code,
     mode: room.mode || 'multiplayer',
+    ruleset: room.ruleset || 'classic',
     sessionId: ensureAudit(room).sessionId,
     status: 'finished',
     startedAt: room.startedAt ? new Date(room.startedAt) : null,
@@ -263,8 +267,14 @@ async function initialize() {
       roomSessions.createIndex({ roomCode: 1, openedAt: -1 }),
       roomSessions.createIndex({ status: 1, lastActivityAt: -1 }),
       serverEvents.createIndex({ at: -1 }),
-      leaderboard.createIndex({ mode: 1, score: -1, coins: -1, achievedAt: 1 })
+      leaderboard.createIndex({ rankingVersion: 1, mode: 1, score: -1, coins: -1, achievedAt: 1 })
     ]);
+
+    // Os recordes anteriores pertencem à versão de 6 rodadas e não são
+    // comparáveis com a nova versão de 5 rodadas. A limpeza é idempotente:
+    // em reinícios futuros, os registros da versão atual são preservados.
+    await leaderboard.deleteMany({ rankingVersion: { $ne: RANKING_VERSION } });
+
     return { enabled: true, dbName: database.databaseName };
   } catch (error) {
     lastError = error;
@@ -431,6 +441,7 @@ async function rankingPosition(record, excludeId = null) {
   if (!enabled || !database || !record) return null;
   const collection = database.collection('leaderboard_records');
   const query = {
+    rankingVersion: RANKING_VERSION,
     mode: record.mode,
     $or: [
       { score: { $gt: record.score } },
@@ -447,7 +458,7 @@ async function rankingPosition(record, excludeId = null) {
 async function rankingLeader(mode) {
   if (!enabled || !database || !RANKING_MODES.includes(mode)) return null;
   const record = await database.collection('leaderboard_records')
-    .find({ mode })
+    .find({ rankingVersion: RANKING_VERSION, mode })
     .sort({ score: -1, coins: -1, achievedAt: 1, _id: 1 })
     .limit(1)
     .next();
@@ -466,10 +477,11 @@ async function registerRankingResults(room) {
 
   for (const entry of rankingResultEntries(room)) {
     const now = new Date();
-    const documentId = `${mode}:${entry.rankingPlayerId}`;
+    const documentId = `${RANKING_VERSION}:${mode}:${entry.rankingPlayerId}`;
     const existing = await collection.findOne({ _id: documentId });
     const candidate = {
       _id: documentId,
+      rankingVersion: RANKING_VERSION,
       mode,
       score: entry.score,
       coins: entry.coins,
@@ -480,6 +492,7 @@ async function registerRankingResults(room) {
       const document = {
         _id: documentId,
         rankingPlayerId: entry.rankingPlayerId,
+        rankingVersion: RANKING_VERSION,
         mode,
         nickname: entry.nickname,
         score: entry.score,

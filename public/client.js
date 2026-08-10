@@ -7,6 +7,12 @@
 
   const COLORS = ['yellow', 'white', 'red', 'gray'];
   const COLOR_LABELS = { yellow: 'Amarela', white: 'Branca', red: 'Vermelha', gray: 'Cinza' };
+  const RULESET_LABELS = { classic: 'Intermediário', advanced: 'Avançado', kids: 'Kids' };
+  const RULESET_SUMMARIES = {
+    classic: 'Jogo-base com carpas, plantas e as quatro peças especiais.',
+    advanced: 'Adiciona Anzol, Rede, Garça e Gato ao setup e à movimentação.',
+    kids: 'Sem peças especiais ou avançadas: 7 carpas de cada cor + 6 plantas.'
+  };
   const PHASE_LABELS = {
     lobby: 'Sala de espera',
     movement: 'Fase da movimentação',
@@ -24,6 +30,10 @@
     sturgeon: '/assets/sturgeon.png',
     dojo: '/assets/dojo.png',
     papaTerra: '/assets/papa-terra.png',
+    hook: '/assets/anzol.png',
+    net: '/assets/rede.png',
+    heron: '/assets/garca.png',
+    cat: '/assets/gato.png',
     coin: '/assets/coin.png',
     moneyBag: '/assets/money-bag.png',
     fishAnimation: '/assets/fish-animation.gif'
@@ -32,9 +42,21 @@
   const SOUND_URLS = {
     move: 'https://res.cloudinary.com/dzjwlafsx/video/upload/v1785869993/fish_move_htw4ys.mp3',
     current: 'https://res.cloudinary.com/dzjwlafsx/video/upload/v1785875411/canal_aberto_longo_lw0d8w.mp3',
-    replace: 'https://res.cloudinary.com/dzjwlafsx/video/upload/v1785869993/change_fish_inwrkc.mp3'
+    replace: 'https://res.cloudinary.com/dzjwlafsx/video/upload/v1785869993/change_fish_inwrkc.mp3',
+    hook: '/assets/anzol.mp3',
+    net: '/assets/rede.mp3',
+    heron: '/assets/garca.mp3',
+    cat: '/assets/gato.mp3'
   };
-  const SOUND_VOLUMES = { move: 0.46, current: 0.58, replace: 0.54 };
+  const SOUND_VOLUMES = {
+    move: 0.46,
+    current: 0.58,
+    replace: 0.54,
+    hook: 0.60,
+    net: 0.60,
+    heron: 0.60,
+    cat: 0.60
+  };
   const soundBases = Object.fromEntries(Object.entries(SOUND_URLS).map(([key, src]) => {
     const audio = new Audio(src);
     audio.preload = 'auto';
@@ -148,9 +170,46 @@
     sound.play().catch(() => {});
   }
 
+  function advancedActivationSoundType(action) {
+    const captureType = action?.advanced?.captures?.[0]?.sources?.[0];
+    if (['hook', 'net', 'heron', 'cat'].includes(captureType)) return captureType;
+
+    const jumpType = action?.advanced?.jumps?.[0]?.type;
+    if (['heron', 'cat'].includes(jumpType)) return jumpType;
+
+    return null;
+  }
+
+  function manuallyMovedAdvancedSoundType(action) {
+    if (['hook', 'net'].includes(action?.pieceType)) return action.pieceType;
+    const overlayType = (action?.movedOverlayTypes || []).find((type) => ['heron', 'cat'].includes(type));
+    return overlayType || null;
+  }
+
   function playActionSound(action) {
     if (!action || Date.now() - Number(action.at || 0) > 3500) return;
-    if (action.type === 'move' || action.type === 'correctionMove' || action.type === 'undo') playSound('move');
+
+    if (action.type === 'move' || action.type === 'correctionMove') {
+      // O efeito automático tem prioridade sonora sobre o som do movimento que o disparou.
+      const advancedEffect = advancedActivationSoundType(action);
+      if (advancedEffect) {
+        playSound(advancedEffect);
+        return;
+      }
+
+      // Anzol/Rede usam seu próprio som quando movidos. Garça/Gato acompanham a planta
+      // em que estão sobrepostos e também usam seu som quando essa planta é movida.
+      const movedAdvanced = manuallyMovedAdvancedSoundType(action);
+      if (movedAdvanced) {
+        playSound(movedAdvanced);
+        return;
+      }
+
+      playSound('move');
+      return;
+    }
+
+    if (action.type === 'undo') playSound('move');
     if (action.type === 'circulationStart') playSound('current');
     if (action.type === 'replace') playSound('replace');
   }
@@ -310,6 +369,15 @@
       return { ...emptyAnimation, shellClass: 'animate-replace' };
     }
 
+    const advancedCapture = action.advanced?.captures?.find((capture) =>
+      capture.replacementPieceId === piece.id
+      && capture.position?.row === row
+      && capture.position?.col === col
+    );
+    if (advancedCapture) {
+      return { ...emptyAnimation, shellClass: 'animate-replace advanced-capture-replacement' };
+    }
+
     if (action.type === 'undo' && action.playerId === playerId && action.positions?.some((position) => position.row === row && position.col === col)) {
       return { ...emptyAnimation, shellClass: 'animate-undo', shellStyle: `--undo-delay:${(row * state.constants.cols + col) * 10}ms;` };
     }
@@ -343,17 +411,33 @@
   function createPieceHtml(piece, playerId, row, col, { tiny = false } = {}) {
     if (!piece) return '<span class="empty-water" aria-label="Espaço vazio"></span>';
     const animation = pieceAnimation(playerId, row, col, piece);
-    const rotation = Number(piece.rotation || 0);
+    const isAdvancedCell = ['hook', 'net'].includes(piece.type);
+    const rotation = isAdvancedCell ? 0 : Number(piece.rotation || 0);
     const src = piece.type === 'carp' ? ASSETS[piece.color] : ASSETS[piece.type];
     const SPECIAL_LABELS = { shoal: 'Tesourinhas', sturgeon: 'Esturjão', dojo: 'Dojô', papaTerra: 'Papa-terra' };
-    const label = piece.type === 'carp' ? `Carpa ${COLOR_LABELS[piece.color]}` : piece.type === 'algae' ? 'Planta' : (SPECIAL_LABELS[piece.type] || 'Peça especial');
+    const ADVANCED_LABELS = { hook: 'Anzol', net: 'Rede', heron: 'Garça', cat: 'Gato' };
+    const label = piece.type === 'carp'
+      ? `Carpa ${COLOR_LABELS[piece.color]}`
+      : piece.type === 'algae'
+        ? 'Planta'
+        : (SPECIAL_LABELS[piece.type] || ADVANCED_LABELS[piece.type] || 'Peça especial');
     const lastMoved = state?.phase === 'movement' && state?.players?.[playerId]?.lastMovedPieceId === piece.id;
     const specialEffectMoved = state?.phase === 'movement'
       && state?.lastAction?.type === 'move'
       && state.lastAction.playerId === playerId
       && state.lastAction.special?.moves?.some((move) => move.pieceId === piece.id && move.to?.row === row && move.to?.col === col);
     const movementEmphasisClass = specialEffectMoved ? 'special-effect-moved-art' : (lastMoved ? 'last-moved-art' : '');
-    const orientationStyle = animation.orientationStyle || `--piece-rotation:${rotation}deg;--start-rotation:${rotation}deg;`;
+    const orientationStyle = isAdvancedCell
+      ? `--piece-rotation:0deg;--start-rotation:0deg;--advanced-facing-scale:${piece.facing === 'right' ? -1 : 1};`
+      : (animation.orientationStyle || `--piece-rotation:${rotation}deg;--start-rotation:${rotation}deg;--advanced-facing-scale:1;`);
+    const overlaysHtml = piece.type === 'algae' && Array.isArray(piece.overlays)
+      ? piece.overlays.map((overlay, index) => {
+          const overlayLabel = ADVANCED_LABELS[overlay.type] || 'Peça avançada';
+          const facingScale = overlay.facing === 'right' ? -1 : 1;
+          return `<img class="advanced-overlay-art advanced-overlay-${overlay.type}" style="--overlay-index:${index};--advanced-facing-scale:${facingScale}" src="${ASSETS[overlay.type]}" alt="" title="${overlayLabel}" aria-hidden="true" draggable="false">`;
+        }).join('')
+      : '';
+
     return `
   <span
     class="piece-shell piece-shell-${piece.type} ${tiny ? 'tiny' : ''} ${animation.shellClass}"
@@ -372,6 +456,7 @@
         draggable="false"
       >
     </span>
+    ${overlaysHtml}
   </span>
 `;
   }
@@ -407,16 +492,6 @@
       </div>`;
   }
 
-  function liquidFilterSvg() {
-    return `<svg class="liquid-filter-defs" aria-hidden="true" width="0" height="0">
-      <filter id="liquidRipple" x="-8%" y="-8%" width="116%" height="116%">
-        <feTurbulence type="fractalNoise" baseFrequency="0.008 0.018" numOctaves="2" seed="4" result="noise">
-          <animate attributeName="baseFrequency" dur="11s" values="0.008 0.018;0.012 0.024;0.009 0.015;0.008 0.018" repeatCount="indefinite"></animate>
-        </feTurbulence>
-        <feDisplacementMap in="SourceGraphic" in2="noise" scale="5" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
-      </filter>
-    </svg>`;
-  }
 
   function logoHtml(className = 'brand-logo') {
     return `<img class="${className}" src="/assets/logo.png" alt="Carpa Diem">`;
@@ -433,24 +508,32 @@
   function rankingLeadersModalHtml() {
     if (!rankingLeadersOpen) return '';
     const modes = ['solo', '2', '3', '4'];
+    const rulesets = ['kids', 'classic', 'advanced'];
     const content = rankingLeadersLoading
       ? '<p class="ranking-leaders-loading">Carregando os maiores pontuadores...</p>'
       : rankingLeadersError
         ? `<p class="notice error">${escapeHtml(rankingLeadersError)}</p>`
         : rankingLeadersData?.available === false
           ? '<p class="ranking-leaders-loading">Ranking temporariamente indisponível.</p>'
-          : `<div class="ranking-leaders-grid">${modes.map((mode) => {
-            const item = rankingLeadersData?.leaders?.[mode];
-            const leader = item?.leader;
-            return `<article class="ranking-leader-mode">
-              <p class="eyebrow">${escapeHtml(item?.label || (mode === 'solo' ? 'Solo' : `${mode} jogadores`))}</p>
-              ${leader
-                ? `<strong>${escapeHtml(leader.nickname)}</strong><span>${leader.score} carpas · ${leader.coins} moeda${leader.coins === 1 ? '' : 's'}</span>`
-                : '<strong>Sem recorde</strong><span>Ainda não há resultado registrado.</span>'}
-            </article>`;
+          : `<div class="ranking-difficulty-groups">${rulesets.map((ruleset) => {
+            const group = rankingLeadersData?.rulesets?.[ruleset];
+            const fallbackLeaders = ruleset === 'classic' ? rankingLeadersData?.leaders : null;
+            return `<section class="ranking-difficulty-group">
+              <h3>${escapeHtml(group?.label || RULESET_LABELS[ruleset])}</h3>
+              <div class="ranking-leaders-grid">${modes.map((mode) => {
+                const item = group?.leaders?.[mode] || fallbackLeaders?.[mode];
+                const leader = item?.leader;
+                return `<article class="ranking-leader-mode">
+                  <p class="eyebrow">${escapeHtml(item?.label || (mode === 'solo' ? 'Solo' : `${mode} jogadores`))}</p>
+                  ${leader
+                    ? `<strong>${escapeHtml(leader.nickname)}</strong><span>${leader.score} carpas · ${leader.coins} moeda${leader.coins === 1 ? '' : 's'}</span>`
+                    : '<strong>Sem recorde</strong><span>Ainda não há resultado registrado.</span>'}
+                </article>`;
+              }).join('')}</div>
+            </section>`;
           }).join('')}</div>`;
 
-    return `<div class="modal-backdrop ranking-leaders-backdrop"><section class="modal-card ranking-leaders-card"><p class="eyebrow">Ranking Geral</p><h2>Maiores pontuadores</h2>${content}<button class="secondary-button close-ranking-leaders" type="button">Voltar</button></section></div>`;
+    return `<div class="modal-backdrop ranking-leaders-backdrop"><section class="modal-card ranking-leaders-card"><p class="eyebrow">Ranking Geral</p><h2>Maiores pontuações por nível</h2>${content}<button class="secondary-button close-ranking-leaders" type="button">Voltar</button></section></div>`;
   }
 
   async function openRankingLeaders() {
@@ -501,7 +584,7 @@
       <header class="topbar">
         <div class="topbar-status">
           <span class="eyebrow">Sala ${state.code}</span>
-          <strong>${state.status === 'lobby' ? (state.mode === 'solo' ? 'Modo solo' : 'Aguardando jogadores') : `${state.mode === 'solo' ? 'Solo · ' : ''}Rodada ${state.round}/${state.constants.maxRounds}`}</strong>
+          <strong>${state.status === 'lobby' ? (state.mode === 'solo' ? 'Modo solo' : 'Aguardando jogadores') : `${state.mode === 'solo' ? 'Solo · ' : ''}${RULESET_LABELS[state.ruleset || 'classic']} · Rodada ${state.round}/${state.constants.maxRounds}`}</strong>
           <span class="phase-pill">${PHASE_LABELS[state.phase]}</span>
         </div>
         <div class="topbar-brand">${logoHtml('topbar-logo')}</div>
@@ -523,14 +606,27 @@
 
   function phaseRules() {
     if (state.phase === 'movement') {
-      return [
+      const rules = [
         `Faça ${state.constants.movesPerRound} movimentos usando o espaço vazio.`,
-        'Mover uma planta não gasta movimento; depois dela, mova uma carpa.',
-        'Peças especiais se ativam automaticamente, com prioridade: Tesourinhas, Papa-terra, Dojô e Esturjão.',
-        'Tesourinhas e Dojô gastam 1; Esturjão gasta 2; Papa-terra é gratuito.',
+        'Mover uma planta não gasta movimento; depois dela, mova uma carpa.'
+      ];
+      if (state.ruleset === 'advanced') {
+        rules.push(
+          'Prioridade automática: Anzol, Rede, Garça, Gato, Tesourinhas, Papa-terra, Dojô e Esturjão.',
+          'Peças avançadas têm prioridade sobre as especiais; quando uma avançada ativa, nenhuma especial ativa pelo mesmo novo vazio.',
+          'Capturas avançadas substituem a carpa preferida pela cor menos presente.'
+        );
+      } else if (state.ruleset !== 'kids') {
+        rules.push(
+          'Peças especiais se ativam automaticamente, com prioridade: Tesourinhas, Papa-terra, Dojô e Esturjão.',
+          'Tesourinhas e Dojô gastam 1; Esturjão gasta 2; Papa-terra é gratuito.'
+        );
+      }
+      rules.push(
         'Se o vazio terminar na linha central, preencha-o com um movimento extra.',
         `A cada ${state.constants.extraMoveCost} moedas, compre 1 movimento extra.`
-      ];
+      );
+      return rules;
     }
     if (state.phase === 'development') {
       return [
@@ -559,6 +655,7 @@
     if (state.mode === 'solo') return ['Some as carpas preferidas que saíram pela Correnteza às que ficaram no tanque.', 'Esse total é o seu resultado solo.', 'Sua colocação entra no Ranking Geral — Solo.'];
     return ['Conte todas as carpas de cada cor nos tanques.', 'A maior pontuação vence.', 'Em empate de carpas, vence quem tiver mais moedas.'];
   }
+
 
   function roundPanelHtml() {
     const rules = phaseRules();
@@ -675,6 +772,13 @@
             <div class="lobby-code"><p class="eyebrow">Sala</p><h1>${state.code}</h1></div>
             <button class="copy-code secondary-button" data-code="${state.code}">Copiar código</button>
           </header>
+          <section class="lobby-ruleset" aria-label="Modo de regras">
+            <div class="lobby-ruleset-buttons">
+              ${['classic', 'advanced', 'kids'].map((ruleset) => `<button class="ruleset-button ${state.ruleset === ruleset ? 'active' : ''}" data-ruleset="${ruleset}" ${current?.id === state.hostId ? '' : 'disabled'}>${RULESET_LABELS[ruleset]}</button>`).join('')}
+            </div>
+            <p class="ruleset-summary"><strong>${RULESET_LABELS[state.ruleset || 'classic']}:</strong> ${RULESET_SUMMARIES[state.ruleset || 'classic']}</p>
+            ${current?.id === state.hostId ? '<small>O anfitrião escolhe o modo antes de iniciar.</small>' : '<small>Modo escolhido pelo anfitrião.</small>'}
+          </section>
           ${notice ? `<div class="notice error">${escapeHtml(notice)}</div>` : ''}
           <div class="player-list">
             ${players.map((player) => `<article class="player-row"><span class="connection ${player.connected ? 'online' : ''}"></span>${playerNameChip(player)}${colorBadge(player.color)}${player.id === state.hostId ? '<em>Anfitrião</em>' : ''}</article>`).join('')}
@@ -705,6 +809,10 @@
       notice = 'Código copiado.';
       render();
     });
+    document.querySelectorAll('.ruleset-button').forEach((button) => button.addEventListener('click', () => {
+      if (button.disabled) return;
+      emit('setGameRuleset', { ruleset: button.dataset.ruleset });
+    }));
     document.querySelector('#startGame')?.addEventListener('click', () => {
       const mode = state.mode === 'solo' || identity.roomMode === 'solo' || entryRole === 'solo' ? 'solo' : 'multiplayer';
       emit('startGame', { mode });
@@ -789,24 +897,53 @@
   }
 
   function pieceGuideHtml() {
-    const items = [
+    const baseItems = [
       { key: 'yellow', name: 'Carpa', text: 'Move 1 casa para o vazio.' },
-      { key: 'algae', name: 'Planta', text: 'Não gasta movimento; depois dela, mova uma carpa.' },
+      { key: 'algae', name: 'Planta', text: 'Não gasta movimento; depois dela, mova uma carpa.' }
+    ];
+    const specialItems = [
       { key: 'shoal', name: 'Tesourinhas', text: 'Pode mover manualmente ao vazio por 1. Ao ativar, invade o vazio adjacente por 1.' },
       { key: 'sturgeon', name: 'Esturjão', text: 'Pode mover manualmente ao vazio por 1. Ao ativar, empurra linha/coluna por 2.' },
       { key: 'dojo', name: 'Dojô', text: 'Pode mover manualmente ao vazio por 1. Ao ativar, atravessa a diagonal por 1.' },
       { key: 'papaTerra', name: 'Papa-terra', text: 'Pode mover manualmente ao vazio por 1. Sua troca automática continua grátis.' }
     ];
+    const advancedItems = [
+      { key: 'hook', name: 'Anzol', text: 'Captura sua carpa preferida quando ela está adjacente ao Anzol, entre ele e o vazio, e se move para esse vazio afastando-se do Anzol.' },
+      { key: 'net', name: 'Rede', text: 'Captura a carpa preferida que for movida para uma casa ortogonalmente ao lado dela.' },
+      { key: 'heron', name: 'Garça', text: 'Fica sobre uma planta. Salta para a planta movida na mesma diagonal e arma captura da preferida no vazio adjacente à nova planta.' },
+      { key: 'cat', name: 'Gato', text: 'Fica sobre uma planta. Salta para a planta movida na mesma linha/coluna e arma captura da preferida no vazio adjacente à nova planta.' }
+    ];
+
+    const items = [
+      ...baseItems,
+      ...(state.ruleset === 'kids' ? [] : specialItems),
+      ...(state.ruleset === 'advanced' ? advancedItems : [])
+    ];
+
+    const priority = state.ruleset === 'kids'
+      ? ''
+      : state.ruleset === 'advanced'
+        ? '<div class="piece-guide-priority"><strong>Prioridade de ativação automática:</strong><span>Anzol → Rede → Garça → Gato → Tesourinhas → Papa-terra → Dojô → Esturjão</span></div>'
+        : '<div class="piece-guide-priority"><strong>Prioridade de ativação automática:</strong><span>Tesourinhas → Papa-terra → Dojô → Esturjão</span></div>';
+
     return `<section class="piece-guide-card">
-      <div class="piece-guide-header"><p class="eyebrow">Resumo das peças</p><strong>Como cada peça se comporta</strong></div>
-      <div class="piece-guide-priority"><strong>Prioridade automática de acesso ao vazio:</strong><span>Tesourinhas → Papa-terra → Dojô → Esturjão</span></div>
-      <div class="piece-guide-grid">${items.map(({ key, name, text }) => `
+      <div class="piece-guide-header"><p class="eyebrow">Resumo das peças</p><strong>Modo ${RULESET_LABELS[state.ruleset || 'classic']}</strong></div>
+      ${priority}
+      <div class="piece-guide-grid">${items.map(({ key, name, text }) => {
+        const guidePiece = key === 'yellow'
+          ? { type: 'carp', color: 'yellow', rotation: 90, id: `guide-${key}` }
+          : key === 'heron' || key === 'cat'
+            ? { type: 'algae', rotation: 0, id: `guide-${key}-plant`, overlays: [{ id: `guide-${key}`, type: key }] }
+            : { type: key, rotation: 90, id: `guide-${key}` };
+        return `
         <article class="piece-guide-item">
-          <span class="piece-guide-icon">${createPieceHtml({ type: key === 'yellow' ? 'carp' : key, color: key === 'yellow' ? 'yellow' : undefined, rotation: 90, id: `guide-${key}` }, 'guide', -1, -1, { tiny: true })}</span>
+          <span class="piece-guide-icon">${createPieceHtml(guidePiece, 'guide', -1, -1, { tiny: true })}</span>
           <div><h3>${name}</h3><p>${text}</p></div>
-        </article>`).join('')}</div>
+        </article>`;
+      }).join('')}</div>
     </section>`;
   }
+
 
   function populationScorePanelHtml() {
     const scores = state.liveScores?.scores;
@@ -824,7 +961,11 @@
   function movementPanel(current) {
     const totalMoves = current.moveLimit || state.constants.movesPerRound;
     const completed = Math.max(0, totalMoves - current.movesRemaining);
-    let instruction = 'Clique em uma peça ortogonalmente adjacente ao espaço vazio. Peças especiais também podem ser movidas manualmente por 1 movimento.';
+    let instruction = state.ruleset === 'kids'
+      ? 'Clique em uma peça ortogonalmente adjacente ao espaço vazio.'
+      : state.ruleset === 'advanced'
+        ? 'Clique em uma peça ortogonalmente adjacente ao vazio. Anzol e Rede também se movem normalmente por 1; Garça e Gato permanecem sobre plantas.'
+        : 'Clique em uma peça ortogonalmente adjacente ao espaço vazio. Peças especiais também podem ser movidas manualmente por 1 movimento.';
     if (current.mustMoveCarp) instruction = 'A alga foi movida: agora mova obrigatoriamente uma carpa.';
     if (current.correctionRequired) instruction = 'Preencha o vazio da linha central usando a peça imediatamente acima ou abaixo, ou compre um movimento extra.';
     if (current.movementDeadEnd) instruction = 'Você ficou sem movimento válido para completar o numero total e exato de 12 de movimentos. Clique em “Desfazer jogada” e escolha outro caminho.';
@@ -845,7 +986,7 @@
         <p class="instruction">${instruction}</p>
         ${!isCompactMobile() && canFinish ? '<button id="finishMovement" class="primary-button">Concluir movimentação</button>' : ''}
         ${!isCompactMobile() && current.movementReady && waitingForOtherPlayersMessage() ? '<button class="secondary-button try-next-phase" data-wait-phase="movement">Continuar para a próxima fase</button>' : ''}
-        ${current.specialAlert ? `<p class="special-action-alert" role="status">${escapeHtml(current.specialAlert)}</p>` : ''}
+        ${current.specialAlert ? `<div class="automatic-activation-notice" role="status"><strong>O que aconteceu</strong><p>${escapeHtml(current.specialAlert)}</p></div>` : ''}
         ${current.movementDeadEnd ? '<p class="movement-alert visible" role="alert" aria-live="assertive">Você ficou sem movimento válido para completar o numero total e exato de 12 de movimentos. Clique em “Desfazer jogada” e escolha outro caminho.</p>' : `<p class="movement-alert ${movementError ? 'visible' : ''}" role="alert" aria-live="assertive">${movementError ? escapeHtml(movementError) : '&nbsp;'}</p>`}
       </section>`;
   }
@@ -890,8 +1031,9 @@
 
   function rankingModeLabel() {
     if (state?.rankingGeneral?.label) return state.rankingGeneral.label;
-    if (state?.mode === 'solo') return 'Solo';
-    return `${state?.playerOrder?.length || 0} jogadores`;
+    const rulesetLabel = RULESET_LABELS[state?.ruleset || 'classic'] || 'Intermediário';
+    const modeLabel = state?.mode === 'solo' ? 'Solo' : `${state?.playerOrder?.length || 0} jogadores`;
+    return `${rulesetLabel} — ${modeLabel}`;
   }
 
   function rankingPositionText(playerId) {
@@ -1095,7 +1237,6 @@
 
     app.innerHTML = `
       <div class="game-shell ${layout}">
-        ${liquidFilterSvg()}
         ${topbarHtml()}
         ${roundIntroHtml()}
         ${notice ? `<div class="notice error floating">${escapeHtml(notice)}</div>` : ''}
@@ -1159,7 +1300,6 @@
 
     app.innerHTML = `
       <div class="game-shell ${layout}">
-        ${liquidFilterSvg()}
         ${topbarHtml()}
         ${roundIntroHtml()}
         ${notice ? `<div class="notice error floating">${escapeHtml(notice)}</div>` : ''}

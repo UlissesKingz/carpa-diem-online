@@ -9,6 +9,7 @@ const {
   addPlayer,
   addSpectator,
   removeMember,
+  setGameRuleset,
   startGame,
   requestRestart,
   respondRestart,
@@ -135,6 +136,7 @@ function roomSummary(room) {
   return {
     code: room.code,
     mode: room.mode || 'multiplayer',
+    ruleset: room.ruleset || 'classic',
     status: room.status,
     phase: room.phase,
     round: room.round,
@@ -392,7 +394,14 @@ function clearSocketRoom(socket) {
 io.on('connection', (socket) => {
   socket.on('createRoom', safeHandler(socket, (payload = {}) => {
     if (!COLORS.includes(payload.color)) throw new Error('Escolha uma cor válida.');
-    const room = uniqueRoom({ hostName: payload.name, color: payload.color, socketId: socket.id, mode: payload.mode, rankingPlayerId: payload.rankingPlayerId });
+    const room = uniqueRoom({
+      hostName: payload.name,
+      color: payload.color,
+      socketId: socket.id,
+      mode: payload.mode,
+      rankingPlayerId: payload.rankingPlayerId,
+      ruleset: payload.ruleset
+    });
     rooms.set(room.code, room);
     const player = room.players[room.hostId];
     storage.ensureAudit(room);
@@ -517,6 +526,14 @@ io.on('connection', (socket) => {
     }
     emitRoom(room);
     return {};
+  }));
+
+  socket.on('setGameRuleset', safeHandler(socket, (payload = {}) => {
+    const room = roomForSocket(socket);
+    if (socket.data.memberRole !== 'player') throw new Error('Espectadores não podem alterar o modo de regras.');
+    setGameRuleset(room, socket.data.memberId, payload.ruleset);
+    emitRoom(room);
+    return { ruleset: room.ruleset };
   }));
 
   socket.on('startGame', safeHandler(socket, (payload = {}) => {
