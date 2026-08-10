@@ -3,11 +3,13 @@
   const app = document.querySelector('#app');
   const layout = document.body.dataset.layout || 'desktop';
   const config = window.CARPAS_CONFIG || {};
+  const useMobilePngAssets = layout === 'mobile' || window.matchMedia('(max-width: 720px)').matches;
+  const PNG_ASSET_ROOT = useMobilePngAssets ? '/assets/mobile' : '/assets';
   const RANKING_PLAYER_ID_KEY = 'carpaDiemRankingPlayerId';
 
   const COLORS = ['yellow', 'white', 'red', 'gray'];
   const COLOR_LABELS = { yellow: 'Amarela', white: 'Branca', red: 'Vermelha', gray: 'Cinza' };
-  const RULESET_LABELS = { classic: 'Intermediário', advanced: 'Avançado', kids: 'Kids' };
+  const RULESET_LABELS = { classic: 'Intermediária', advanced: 'Avançada', kids: 'Kids' };
   const RULESET_SUMMARIES = {
     classic: 'Jogo-base com carpas, plantas e as quatro peças especiais.',
     advanced: 'Adiciona Anzol, Rede, Garça e Gato ao setup e à movimentação.',
@@ -21,21 +23,22 @@
     finished: 'Fase do resultado final'
   };
   const ASSETS = {
-    yellow: '/assets/carp-yellow.png',
-    white: '/assets/carp-white.png',
-    red: '/assets/carp-red.png',
-    gray: '/assets/carp-gray.png',
-    algae: '/assets/algae.png',
-    shoal: '/assets/tesourinhas.png',
-    sturgeon: '/assets/sturgeon.png',
-    dojo: '/assets/dojo.png',
-    papaTerra: '/assets/papa-terra.png',
-    hook: '/assets/anzol.png',
-    net: '/assets/rede.png',
-    heron: '/assets/garca.png',
-    cat: '/assets/gato.png',
-    coin: '/assets/coin.png',
-    moneyBag: '/assets/money-bag.png',
+    yellow: `${PNG_ASSET_ROOT}/carp-yellow.png`,
+    white: `${PNG_ASSET_ROOT}/carp-white.png`,
+    red: `${PNG_ASSET_ROOT}/carp-red.png`,
+    gray: `${PNG_ASSET_ROOT}/carp-gray.png`,
+    algae: `${PNG_ASSET_ROOT}/algae.png`,
+    shoal: `${PNG_ASSET_ROOT}/tesourinhas.png`,
+    sturgeon: `${PNG_ASSET_ROOT}/sturgeon.png`,
+    dojo: `${PNG_ASSET_ROOT}/dojo.png`,
+    papaTerra: `${PNG_ASSET_ROOT}/papa-terra.png`,
+    hook: `${PNG_ASSET_ROOT}/anzol.png`,
+    net: `${PNG_ASSET_ROOT}/rede.png`,
+    heron: `${PNG_ASSET_ROOT}/garca.png`,
+    cat: `${PNG_ASSET_ROOT}/gato.png`,
+    coin: `${PNG_ASSET_ROOT}/coin.png`,
+    moneyBag: `${PNG_ASSET_ROOT}/money-bag.png`,
+    logo: `${PNG_ASSET_ROOT}/logo.png`,
     fishAnimation: '/assets/fish-animation.gif'
   };
 
@@ -422,11 +425,20 @@
         ? 'Planta'
         : (SPECIAL_LABELS[piece.type] || ADVANCED_LABELS[piece.type] || 'Peça especial');
     const lastMoved = state?.phase === 'movement' && state?.players?.[playerId]?.lastMovedPieceId === piece.id;
-    const specialEffectMoved = state?.phase === 'movement'
-      && state?.lastAction?.type === 'move'
-      && state.lastAction.playerId === playerId
+    const actionIsOwnMovement = state?.phase === 'movement'
+      && ['move', 'correctionMove'].includes(state?.lastAction?.type)
+      && state.lastAction.playerId === playerId;
+    const specialEffectMoved = actionIsOwnMovement
       && state.lastAction.special?.moves?.some((move) => move.pieceId === piece.id && move.to?.row === row && move.to?.col === col);
-    const movementEmphasisClass = specialEffectMoved ? 'special-effect-moved-art' : (lastMoved ? 'last-moved-art' : '');
+    const advancedCellEffect = actionIsOwnMovement
+      && state.lastAction.advanced?.captures?.some((capture) =>
+        capture.activationPieceId === piece.id
+        && capture.activationPosition?.row === row
+        && capture.activationPosition?.col === col
+      );
+    const movementEmphasisClass = (specialEffectMoved || advancedCellEffect)
+      ? 'special-effect-moved-art'
+      : (lastMoved ? 'last-moved-art' : '');
     const orientationStyle = isAdvancedCell
       ? `--piece-rotation:0deg;--start-rotation:0deg;--advanced-facing-scale:${piece.facing === 'right' ? -1 : 1};`
       : (animation.orientationStyle || `--piece-rotation:${rotation}deg;--start-rotation:${rotation}deg;--advanced-facing-scale:1;`);
@@ -434,7 +446,34 @@
       ? piece.overlays.map((overlay, index) => {
           const overlayLabel = ADVANCED_LABELS[overlay.type] || 'Peça avançada';
           const facingScale = overlay.facing === 'right' ? -1 : 1;
-          return `<img class="advanced-overlay-art advanced-overlay-${overlay.type}" style="--overlay-index:${index};--advanced-facing-scale:${facingScale}" src="${ASSETS[overlay.type]}" alt="" title="${overlayLabel}" aria-hidden="true" draggable="false">`;
+          const overlayJump = actionIsOwnMovement
+            ? state.lastAction.advanced?.jumps?.find((jump) =>
+                jump.overlayId === overlay.id
+                && jump.to?.row === row
+                && jump.to?.col === col
+              )
+            : null;
+          const overlayCapture = actionIsOwnMovement
+            ? state.lastAction.advanced?.captures?.find((capture) =>
+                capture.activationOverlayId === overlay.id
+                && capture.activationPosition?.row === row
+                && capture.activationPosition?.col === col
+              )
+            : null;
+          const overlayMovedWithPlant = actionIsOwnMovement
+            && state.lastAction.pieceId === piece.id
+            && state.lastAction.to?.row === row
+            && state.lastAction.to?.col === col
+            && (state.lastAction.movedOverlayTypes || []).includes(overlay.type);
+          const overlayEmphasisClass = (overlayJump || overlayCapture)
+            ? 'special-effect-moved-art'
+            : ((overlayMovedWithPlant || lastMoved) ? 'last-moved-art' : '');
+          const animateOverlayJump = Boolean(animateCurrentAction && overlayJump && state.lastAction.from);
+          const overlayMotionClass = animateOverlayJump ? 'animate-advanced-overlay-jump' : '';
+          const overlayMotionStyle = animateOverlayJump
+            ? `--overlay-move-x:${overlayJump.from.col - state.lastAction.from.col};--overlay-move-y:${overlayJump.from.row - state.lastAction.from.row};`
+            : '';
+          return `<span class="advanced-overlay-motion ${overlayMotionClass}" style="${overlayMotionStyle}"><span class="advanced-overlay-position" style="--overlay-index:${index}"><span class="advanced-overlay-facing" style="--advanced-facing-scale:${facingScale}"><img class="advanced-overlay-art advanced-overlay-${overlay.type} ${overlayEmphasisClass}" src="${ASSETS[overlay.type]}" alt="" title="${overlayLabel}" aria-hidden="true" draggable="false"></span></span></span>`;
         }).join('')
       : '';
 
@@ -494,7 +533,7 @@
 
 
   function logoHtml(className = 'brand-logo') {
-    return `<img class="${className}" src="/assets/logo.png" alt="Carpa Diem">`;
+    return `<img class="${className}" src="${ASSETS.logo}" alt="Carpa Diem">`;
   }
 
   function externalButton(label, key, icon) {
@@ -774,7 +813,7 @@
           </header>
           <section class="lobby-ruleset" aria-label="Modo de regras">
             <div class="lobby-ruleset-buttons">
-              ${['classic', 'advanced', 'kids'].map((ruleset) => `<button class="ruleset-button ${state.ruleset === ruleset ? 'active' : ''}" data-ruleset="${ruleset}" ${current?.id === state.hostId ? '' : 'disabled'}>${RULESET_LABELS[ruleset]}</button>`).join('')}
+              ${['kids', 'classic', 'advanced'].map((ruleset) => `<button class="ruleset-button ${state.ruleset === ruleset ? 'active' : ''}" data-ruleset="${ruleset}" ${current?.id === state.hostId ? '' : 'disabled'}>${RULESET_LABELS[ruleset]}</button>`).join('')}
             </div>
             <p class="ruleset-summary"><strong>${RULESET_LABELS[state.ruleset || 'classic']}:</strong> ${RULESET_SUMMARIES[state.ruleset || 'classic']}</p>
             ${current?.id === state.hostId ? '<small>O anfitrião escolhe o modo antes de iniciar.</small>' : '<small>Modo escolhido pelo anfitrião.</small>'}
@@ -927,7 +966,7 @@
         : '<div class="piece-guide-priority"><strong>Prioridade de ativação automática:</strong><span>Tesourinhas → Papa-terra → Dojô → Esturjão</span></div>';
 
     return `<section class="piece-guide-card">
-      <div class="piece-guide-header"><p class="eyebrow">Resumo das peças</p><strong>Modo ${RULESET_LABELS[state.ruleset || 'classic']}</strong></div>
+      <div class="piece-guide-header"><p class="eyebrow">Resumo das peças</p><strong>Partida ${RULESET_LABELS[state.ruleset || 'classic']}</strong></div>
       ${priority}
       <div class="piece-guide-grid">${items.map(({ key, name, text }) => {
         const guidePiece = key === 'yellow'
@@ -1031,7 +1070,7 @@
 
   function rankingModeLabel() {
     if (state?.rankingGeneral?.label) return state.rankingGeneral.label;
-    const rulesetLabel = RULESET_LABELS[state?.ruleset || 'classic'] || 'Intermediário';
+    const rulesetLabel = RULESET_LABELS[state?.ruleset || 'classic'] || 'Intermediária';
     const modeLabel = state?.mode === 'solo' ? 'Solo' : `${state?.playerOrder?.length || 0} jogadores`;
     return `${rulesetLabel} — ${modeLabel}`;
   }

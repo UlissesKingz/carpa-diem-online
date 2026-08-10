@@ -387,8 +387,8 @@ function capturePreferredCarp(board, position, preferredColor, sources = []) {
   };
 }
 
-function netAdjacentTo(board, position) {
-  return adjacentPositions(position).some(({ row, col }) => board[row][col]?.type === 'net');
+function netPositionAdjacentTo(board, position) {
+  return adjacentPositions(position).find(({ row, col }) => board[row][col]?.type === 'net') || null;
 }
 
 function overlayEntries(board) {
@@ -451,7 +451,8 @@ function detectAdvancedTrigger(boardBefore, boardAfter, piece, from, destination
     const hookSource = hookSourceForCarpMove(boardBefore, from, destination, preferredColor);
     if (hookSource) return { type: 'hook', kind: 'capture', sourcePosition: hookSource };
 
-    if (netAdjacentTo(boardAfter, destination)) return { type: 'net', kind: 'capture' };
+    const netPosition = netPositionAdjacentTo(boardAfter, destination);
+    if (netPosition) return { type: 'net', kind: 'capture', sourcePosition: { ...netPosition } };
 
     for (const type of ['heron', 'cat']) {
       const trap = armedPredatorCaptureCandidate(boardAfter, destination, armedPredators, type);
@@ -474,6 +475,16 @@ function applyAdvancedTrigger(board, trigger, destination, preferredColor) {
 
   if (trigger.kind === 'capture') {
     const capture = capturePreferredCarp(board, destination, preferredColor, [trigger.type]);
+    if (capture) {
+      const activationPosition = trigger.sourcePosition || trigger.trap?.position || null;
+      const activationPiece = activationPosition
+        ? board[activationPosition.row]?.[activationPosition.col]
+        : null;
+      capture.activationType = trigger.type;
+      capture.activationPosition = activationPosition ? { ...activationPosition } : null;
+      capture.activationPieceId = ADVANCED_CELL_TYPES.includes(trigger.type) ? (activationPiece?.id || null) : null;
+      capture.activationOverlayId = ADVANCED_OVERLAY_TYPES.includes(trigger.type) ? (trigger.trap?.overlayId || null) : null;
+    }
     return { captures: capture ? [capture] : [], jumps: [], armed: [] };
   }
 

@@ -667,6 +667,14 @@
   object-fit: contain;
 }
 
+.rule-animation figcaption {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: .74rem;
+  line-height: 1.35;
+  text-align: center;
+}
+
 /* Logo centralizado no cabeçalho */
 .manual-topbar {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -689,6 +697,10 @@
   }
   .rule-animation img {
     width: min(100%, 210px);
+  }
+  .rule-animation figcaption {
+    margin-top: 8px;
+    font-size: .68rem;
   }
 }
 
