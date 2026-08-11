@@ -15,7 +15,7 @@ const SPECIAL_COSTS = { shoal: 1, papaTerra: 0, dojo: 1, sturgeon: 2 };
 const SPECIAL_LABELS = { shoal: 'Tesourinhas', papaTerra: 'Papa-terra', dojo: 'Dojô', sturgeon: 'Esturjão' };
 
 const RULESETS = ['classic', 'advanced', 'kids'];
-const RULESET_LABELS = { classic: 'Intermediário', advanced: 'Avançado', kids: 'Kids' };
+const RULESET_LABELS = { classic: 'Padrão', advanced: 'Avançado', kids: 'Kids' };
 const ADVANCED_TYPES = ['hook', 'net', 'heron', 'cat'];
 const ADVANCED_CELL_TYPES = ['hook', 'net'];
 const ADVANCED_OVERLAY_TYPES = ['heron', 'cat'];
@@ -199,6 +199,28 @@ function restoreMovementState(player, snapshot) {
     ...trap,
     position: trap.position ? { ...trap.position } : null
   }));
+}
+
+function snapshotDevelopmentState(player) {
+  return {
+    board: cloneBoard(player.board),
+    development: player.development ? {
+      ...player.development,
+      eligibleColors: [...(player.development.eligibleColors || [])]
+    } : null,
+    coins: Number(player.coins || 0),
+    discard: { ...(player.discard || {}) }
+  };
+}
+
+function restoreDevelopmentState(player, snapshot) {
+  player.board = cloneBoard(snapshot.board);
+  player.development = snapshot.development ? {
+    ...snapshot.development,
+    eligibleColors: [...(snapshot.development.eligibleColors || [])]
+  } : null;
+  player.coins = Number(snapshot.coins || 0);
+  player.discard = { ...(snapshot.discard || {}) };
 }
 
 function findEmpty(board) {
@@ -437,26 +459,39 @@ function movePredatorOverlayToPlant(board, targetPosition, type) {
   };
 }
 
-function armedPredatorCaptureCandidate(board, destination, armedPredators, type) {
-  return (armedPredators || []).find((trap) => {
-    if (trap?.type !== type || !trap.position || !isOrthogonallyAdjacent(trap.position, destination)) return false;
-    const plant = board[trap.position.row]?.[trap.position.col];
-    return plant?.type === 'algae'
-      && (plant.overlays || []).some((overlay) => overlay.id === trap.overlayId && overlay.type === type);
-  }) || null;
+function predatorCaptureCandidate(board, destination, type) {
+  return overlayEntries(board).find(({ overlay, position }) =>
+    overlay.type === type && isOrthogonallyAdjacent(position, destination)
+  ) || null;
 }
 
-function detectAdvancedTrigger(boardBefore, boardAfter, piece, from, destination, preferredColor, armedPredators = []) {
+function detectAdvancedTrigger(boardBefore, boardAfter, piece, from, destination, preferredColor) {
   if (piece?.type === 'carp' && piece.color === preferredColor) {
     const hookSource = hookSourceForCarpMove(boardBefore, from, destination, preferredColor);
-    if (hookSource) return { type: 'hook', kind: 'capture', sourcePosition: hookSource };
+    if (hookSource) {
+      return {
+        type: 'hook',
+        kind: 'capture',
+        sourcePosition: hookSource,
+        capturedPosition: { ...destination },
+        replacementPosition: { ...from }
+      };
+    }
 
     const netPosition = netPositionAdjacentTo(boardAfter, destination);
     if (netPosition) return { type: 'net', kind: 'capture', sourcePosition: { ...netPosition } };
 
+    // Garça e Gato ameaçam permanentemente as casas ortogonais (✚) à planta
+    // enquanto permanecerem sobre ela; não existe mais janela de apenas uma jogada.
     for (const type of ['heron', 'cat']) {
-      const trap = armedPredatorCaptureCandidate(boardAfter, destination, armedPredators, type);
-      if (trap) return { type, kind: 'capture', trap };
+      const trap = predatorCaptureCandidate(boardAfter, destination, type);
+      if (trap) {
+        return {
+          type,
+          kind: 'capture',
+          trap: { type, overlayId: trap.overlay.id, position: { ...trap.position } }
+        };
+      }
     }
   }
 
@@ -470,12 +505,39 @@ function detectAdvancedTrigger(boardBefore, boardAfter, piece, from, destination
   return null;
 }
 
+function capturePreferredCarpWithReplacement(board, capturedPosition, replacementPosition, preferredColor, sources = []) {
+  const piece = board[capturedPosition.row]?.[capturedPosition.col];
+  if (piece?.type !== 'carp' || piece.color !== preferredColor) return null;
+  const replacementColor = leastPresentReplacementColor(board, preferredColor);
+  if (!replacementColor) return null;
+
+  const replacement = createPiece('carp', replacementColor);
+  board[capturedPosition.row][capturedPosition.col] = null;
+  board[replacementPosition.row][replacementPosition.col] = replacement;
+  return {
+    position: { ...replacementPosition },
+    capturedPosition: { ...capturedPosition },
+    replacementPosition: { ...replacementPosition },
+    capturedPieceId: piece.id,
+    capturedColor: preferredColor,
+    replacementPieceId: replacement.id,
+    replacementColor,
+    sources: [...sources]
+  };
+}
+
 function applyAdvancedTrigger(board, trigger, destination, preferredColor) {
   if (!trigger) return { captures: [], jumps: [], armed: [] };
 
   if (trigger.kind === 'capture') {
-    const capture = capturePreferredCarp(board, destination, preferredColor, [trigger.type]);
+    const capturedPosition = trigger.capturedPosition || destination;
+    const replacementPosition = trigger.replacementPosition || destination;
+    const capture = trigger.type === 'hook'
+      ? capturePreferredCarpWithReplacement(board, capturedPosition, replacementPosition, preferredColor, [trigger.type])
+      : capturePreferredCarp(board, capturedPosition, preferredColor, [trigger.type]);
     if (capture) {
+      capture.capturedPosition ||= { ...capturedPosition };
+      capture.replacementPosition ||= { ...replacementPosition };
       const activationPosition = trigger.sourcePosition || trigger.trap?.position || null;
       const activationPiece = activationPosition
         ? board[activationPosition.row]?.[activationPosition.col]
@@ -490,15 +552,7 @@ function applyAdvancedTrigger(board, trigger, destination, preferredColor) {
 
   if (trigger.kind === 'jump') {
     const jump = movePredatorOverlayToPlant(board, destination, trigger.type);
-    return {
-      captures: [],
-      jumps: jump ? [jump] : [],
-      armed: jump ? [{
-        type: jump.type,
-        overlayId: jump.overlayId,
-        position: { ...jump.to }
-      }] : []
-    };
+    return { captures: [], jumps: jump ? [jump] : [], armed: [] };
   }
 
   return { captures: [], jumps: [], armed: [] };
@@ -651,8 +705,8 @@ function applySpecialTrigger(board, trigger) {
   }
 
   const messages = {
-    shoal: 'Ativação automática — Tesourinhas: o novo vazio ficou ortogonalmente adjacente a elas. Tesourinhas ocuparam o espaço vazio e consumiram 1 movimento.',
-    dojo: 'Ativação automática — Dojô: o novo vazio ficou na mesma diagonal. Dojô atravessou o tanque até o vazio e consumiu 1 movimento.',
+    shoal: 'Ativação automática — Tesourinhas: o novo vazio ficou ortogonalmente (✚) adjacente a elas. Tesourinhas ocuparam o espaço vazio e consumiram 1 movimento.',
+    dojo: 'Ativação automática — Dojô: o novo vazio ficou na mesma diagonal (✕). Dojô atravessou o tanque até o vazio e consumiu 1 movimento.',
     papaTerra: `Ativação automática — Papa-terra: o novo vazio ficou a duas casas em linha reta, com uma peça entre eles. Papa-terra trocou de posição com ${pieceName(board[trigger.position.row][trigger.position.col])} e nenhum movimento foi consumido.`,
     sturgeon: `Ativação automática — Esturjão: o novo vazio ficou na mesma linha ou coluna. Esturjão empurrou ${affectedCount} peça(s) em direção ao vazio e consumiu 2 movimentos.`
   };
@@ -773,7 +827,11 @@ function phaseWaitLabel(phase) {
 
 function playerFinishedPhase(player, phase) {
   if (phase === 'movement') return Boolean(player?.movementReady);
-  if (phase === 'development') return Boolean(player?.development?.done);
+  if (phase === 'development') {
+    const development = player?.development;
+    if (!development) return false;
+    return development.confirmed === undefined ? Boolean(development.done) : Boolean(development.confirmed);
+  }
   return false;
 }
 
@@ -827,6 +885,7 @@ function createPlayer({ name, color, socketId, rankingPlayerId }) {
     movementHistory: [],
     pendingDevelopmentCapacity: 0,
     development: null,
+    developmentHistory: [],
     coins: 0,
     extraMovesPurchased: 0,
     specialAlert: '',
@@ -1008,6 +1067,7 @@ function resetPlayerForRound(player, initializeBoard = false, setup = {}) {
   player.movementHistory = [];
   player.pendingDevelopmentCapacity = 0;
   player.development = null;
+  player.developmentHistory = [];
   player.extraMovesPurchased = 0;
   player.specialAlert = '';
   player.advancedTrapArmed = [];
@@ -1130,11 +1190,6 @@ function movePiece(room, playerId, from) {
     throw new Error('A peça deve estar ao lado do espaço vazio.');
   }
 
-  const pendingPredators = (player.advancedTrapArmed || []).map((trap) => ({
-    ...trap,
-    position: trap.position ? { ...trap.position } : null
-  }));
-
   if (player.correctionRequired) {
     const validCorrection = from.col === empty.col && Math.abs(from.row - empty.row) === 1 && from.row !== MIDDLE_ROW;
     if (!validCorrection) throw new Error('Preencha a linha central usando a peça imediatamente acima ou abaixo.');
@@ -1145,7 +1200,7 @@ function movePiece(room, playerId, from) {
     board[empty.row][empty.col] = piece;
     board[from.row][from.col] = null;
 
-    const advancedTrigger = detectAdvancedTrigger(boardBefore, board, piece, from, empty, player.color, pendingPredators);
+    const advancedTrigger = detectAdvancedTrigger(boardBefore, board, piece, from, empty, player.color);
     const advanced = applyAdvancedTrigger(board, advancedTrigger, empty, player.color);
     player.advancedTrapArmed = advanced.armed;
     orientAdvancedPiecesTowardEmpty(board, findEmpty(board));
@@ -1182,8 +1237,7 @@ function movePiece(room, playerId, from) {
     piece,
     from,
     empty,
-    player.color,
-    pendingPredators
+    player.color
   );
   const manuallyMovedSpecial = SPECIAL_TYPES.includes(piece.type);
   const specialTrigger = advancedTriggerPreview ? null : detectSpecialTrigger(projected, from, {
@@ -1219,8 +1273,7 @@ function movePiece(room, playerId, from) {
     piece,
     from,
     empty,
-    player.color,
-    pendingPredators
+    player.color
   );
   const advancedAction = applyAdvancedTrigger(board, advancedTrigger, empty, player.color);
   player.advancedTrapArmed = advancedAction.armed;
@@ -1282,10 +1335,10 @@ function advancedCaptureMessage(capture) {
   const source = capture.sources?.[0];
   const replacement = `Ela foi substituída por uma carpa ${labelColor(capture.replacementColor)}.`;
   const explanations = {
-    hook: `Ativação automática — Anzol: sua carpa preferida estava adjacente ao Anzol, entre ele e o vazio, e foi movida para esse vazio, afastando-se do Anzol. A carpa foi capturada. ${replacement}`,
-    net: `Ativação automática — Rede: sua carpa preferida terminou o movimento ortogonalmente adjacente à Rede. A carpa foi capturada. ${replacement}`,
-    heron: `Ativação automática — Garça: após a emboscada, sua carpa preferida foi movida para o vazio adjacente à planta onde a Garça estava. A carpa foi capturada. ${replacement}`,
-    cat: `Ativação automática — Gato: após a emboscada, sua carpa preferida foi movida para o vazio adjacente à planta onde o Gato estava. A carpa foi capturada. ${replacement}`
+    hook: `Ativação automática — Anzol: sua carpa preferida estava ortogonalmente (✚) adjacente ao Anzol, entre ele e o vazio. Ao se mover para o vazio, ela foi fisgada; a carpa substituta entrou na casa original, ao lado do Anzol. ${replacement}`,
+    net: `Ativação automática — Rede: sua carpa preferida terminou o movimento ortogonalmente (✚) adjacente à Rede. A carpa foi capturada. ${replacement}`,
+    heron: `Ativação automática — Garça: enquanto estava sobre a planta, uma carpa preferida entrou no vazio ortogonalmente (✚) adjacente a ela e foi capturada. ${replacement}`,
+    cat: `Ativação automática — Gato: enquanto estava sobre a planta, uma carpa preferida entrou no vazio ortogonalmente (✚) adjacente a ela e foi capturada. ${replacement}`
   };
   return explanations[source] || `Ativação automática — peça avançada: uma carpa preferida foi capturada. ${replacement}`;
 }
@@ -1296,19 +1349,47 @@ function advancedActivationMessage(advancedAction) {
   if (!jump) return '';
 
   if (jump.type === 'heron') {
-    return 'Ativação automática — Garça: a planta movida terminou na mesma diagonal da Garça. A Garça saltou para essa planta e ficou de tocaia: se a próxima jogada mover sua carpa preferida para o vazio adjacente a essa planta, ela será capturada.';
+    return 'Ativação automática — Garça: a planta movida terminou na mesma diagonal (✕) da Garça. A Garça saltou para essa planta e permanece de tocaia: enquanto estiver sobre ela, qualquer carpa preferida movida para um vazio ortogonalmente (✚) adjacente à planta será capturada.';
   }
   if (jump.type === 'cat') {
-    return 'Ativação automática — Gato: a planta movida terminou na mesma linha ou coluna do Gato. O Gato saltou para essa planta e ficou de tocaia: se a próxima jogada mover sua carpa preferida para o vazio adjacente a essa planta, ela será capturada.';
+    return 'Ativação automática — Gato: a planta movida terminou na mesma linha ou coluna do Gato. O Gato saltou para essa planta e permanece de tocaia: enquanto estiver sobre ela, qualquer carpa preferida movida para um vazio ortogonalmente (✚) adjacente à planta será capturada.';
   }
   return '';
 }
 
 function undoLastMove(room, playerId) {
   assertPlayersPresent(room);
-  if (room.phase !== 'movement') throw new Error('Só é possível desfazer durante a fase de movimentação.');
   const player = room.players[playerId];
   if (!player) throw new Error('Jogador não encontrado.');
+
+  if (room.phase === 'development') {
+    if (player.development?.confirmed) {
+      throw new Error(waitingForPlayersMessage(room, playerId, 'development') || 'Você já confirmou a Venda e reposição.');
+    }
+    const snapshot = player.developmentHistory?.pop();
+    if (!snapshot) throw new Error('Não há reposições para desfazer.');
+
+    const boardBeforeUndo = cloneBoard(player.board);
+    restoreDevelopmentState(player, snapshot);
+    const positions = [];
+    for (let row = 0; row < ROWS; row += 1) {
+      for (let col = 0; col < COLS; col += 1) {
+        if ((boardBeforeUndo[row][col]?.id || null) !== (player.board[row][col]?.id || null)) positions.push({ row, col });
+      }
+    }
+    setAction(room, {
+      type: 'undoDevelopment',
+      playerId,
+      positions,
+      developmentHistoryRemaining: player.developmentHistory.length,
+      replaced: player.development?.replaced || 0,
+      coins: player.coins
+    });
+    addLog(room, 'desfez a última reposição.', playerId);
+    return { developmentHistoryRemaining: player.developmentHistory.length };
+  }
+
+  if (room.phase !== 'movement') throw new Error('Só é possível desfazer durante a Movimentação ou a Venda e reposição.');
   if (player.movementReady) throw new Error(waitingForPlayersMessage(room, playerId, 'movement') || 'Você já concluiu a Fase de movimentação.');
   const snapshot = player.movementHistory.pop();
   if (!snapshot) throw new Error('Não há jogadas para desfazer.');
@@ -1387,13 +1468,16 @@ function beginDevelopment(room) {
     const player = room.players[id];
     const capacity = player.pendingDevelopmentCapacity;
     const eligibleColors = eligibleLeastColors(player.board, player.color);
+    const automaticallyDone = capacity === 0 || eligibleColors.length === 0;
     player.development = {
       capacity,
       eligibleColors,
       chosenColor: eligibleColors.length === 1 ? eligibleColors[0] : null,
       replaced: 0,
-      done: capacity === 0 || eligibleColors.length === 0
+      done: automaticallyDone,
+      confirmed: automaticallyDone
     };
+    player.developmentHistory = [];
   }
   setAction(room, { type: 'phaseChange', phase: 'development' });
   addLog(room, 'Começou a fase de Venda e reposição.');
@@ -1419,7 +1503,10 @@ function refreshDevelopmentOptions(player) {
 }
 
 function completeZeroDevelopments(room) {
-  if (room.playerOrder.every((id) => room.players[id].development?.done)) finishDevelopmentAndAdvance(room);
+  if (room.playerOrder.every((id) => {
+    const development = room.players[id].development;
+    return development?.confirmed === undefined ? Boolean(development?.done) : Boolean(development?.confirmed);
+  })) finishDevelopmentAndAdvance(room);
 }
 
 function chooseDevelopmentColor(room, playerId, color) {
@@ -1453,6 +1540,9 @@ function replaceFish(room, playerId, position) {
   }
   if (development.replaced >= development.capacity) throw new Error('Você já realizou todas as substituições conquistadas.');
 
+  player.developmentHistory ||= [];
+  player.developmentHistory.push(snapshotDevelopmentState(player));
+
   const oldColor = piece.color;
   player.discard[oldColor] += 1;
   player.coins += 1;
@@ -1476,12 +1566,36 @@ function replaceFish(room, playerId, position) {
   addLog(room, `trocou uma carpa ${labelColor(oldColor)} por uma ${labelColor(player.color)} e recebeu 1 moeda.`, playerId);
 
   if (development.done) {
-    addLog(room, `concluiu ${development.replaced} reposição(ões).`, playerId);
+    development.confirmed = false;
+    addLog(room, `completou ${development.replaced} reposição(ões) e pode revisar ou desfazer antes de confirmar.`, playerId);
   } else if (exhaustedColor) {
     addLog(room, `esgotou as carpas ${labelColor(oldColor)}s e deve seguir para a próxima menor cor.`, playerId);
   }
+}
 
-  if (room.playerOrder.every((id) => room.players[id].development?.done)) finishDevelopmentAndAdvance(room);
+function markDevelopmentReady(room, playerId) {
+  assertPlayersPresent(room);
+  if (room.phase !== 'development') throw new Error('Não é a fase de Venda e reposição.');
+  const player = room.players[playerId];
+  const development = player?.development;
+  if (!development) throw new Error('Reposição indisponível.');
+  if (development.confirmed) throw new Error(waitingForPlayersMessage(room, playerId, 'development') || 'Você já confirmou a Venda e reposição.');
+  if (!development.done) throw new Error('Complete todas as reposições antes de concluir a fase.');
+
+  development.confirmed = true;
+  setAction(room, {
+    type: 'developmentReady',
+    playerId,
+    replaced: development.replaced,
+    coins: player.coins
+  });
+  addLog(room, 'confirmou a Venda e reposição.', playerId);
+
+  if (room.playerOrder.every((id) => {
+    const current = room.players[id].development;
+    return current?.confirmed === undefined ? Boolean(current?.done) : Boolean(current?.confirmed);
+  })) finishDevelopmentAndAdvance(room);
+  return { confirmed: true };
 }
 
 function finishDevelopmentAndAdvance(room) {
@@ -1659,6 +1773,7 @@ function publicRoom(room) {
       lastMovedPieceId: player.lastMovedPieceId,
       movementHistoryLength: player.movementHistory.length,
       development: player.development,
+      developmentHistoryLength: player.developmentHistory?.length || 0,
       coins: player.coins,
       extraMovesPurchased: player.extraMovesPurchased,
       moveLimit: MOVES_PER_ROUND + player.extraMovesPurchased,
@@ -1756,6 +1871,7 @@ module.exports = {
   markMovementReady,
   chooseDevelopmentColor,
   replaceFish,
+  markDevelopmentReady,
   completeCirculation,
   publicRoom,
   calculateScores,

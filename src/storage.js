@@ -12,6 +12,8 @@ let serverInstanceId = null;
 const roomWriteQueues = new Map();
 
 const RANKING_MODES = ['solo', '2', '3', '4'];
+const RANKING_RULESETS = ['classic', 'advanced', 'kids'];
+const RANKING_RULESET_LABELS = { classic: 'Padrão', advanced: 'Avançado', kids: 'Kids' };
 // Nova temporada de ranking após a redução da partida para 5 rodadas.
 // Alterar esta chave no futuro permite reiniciar os recordes sem misturar regras antigas.
 const RANKING_VERSION = '5-rounds-v1';
@@ -22,9 +24,17 @@ function rankingModeForRoom(room) {
   return ['2', '3', '4'].includes(String(count)) ? String(count) : null;
 }
 
-function rankingLabel(mode) {
+function rankingRulesetForRoom(room) {
+  return RANKING_RULESETS.includes(room?.ruleset) ? room.ruleset : 'classic';
+}
+
+function rankingModeLabel(mode) {
   if (mode === 'solo') return 'Solo';
   return `${mode} jogadores`;
+}
+
+function rankingLabel(ruleset, mode) {
+  return `${RANKING_RULESET_LABELS[ruleset] || RANKING_RULESET_LABELS.classic} — ${rankingModeLabel(mode)}`;
 }
 
 function isBetterRankingResult(candidate, current) {
@@ -198,6 +208,7 @@ function buildMatchRecord(room) {
     const player = room.players[entry.playerId];
     return {
       playerId: entry.playerId,
+      rankingPlayerId: player?.rankingPlayerId || null,
       name: player?.name || 'Jogador',
       color: player?.color || entry.color,
       score: entry.score,
@@ -267,13 +278,72 @@ async function initialize() {
       roomSessions.createIndex({ roomCode: 1, openedAt: -1 }),
       roomSessions.createIndex({ status: 1, lastActivityAt: -1 }),
       serverEvents.createIndex({ at: -1 }),
-      leaderboard.createIndex({ rankingVersion: 1, mode: 1, score: -1, coins: -1, achievedAt: 1 })
+      leaderboard.createIndex({ rankingVersion: 1, ruleset: 1, mode: 1, score: -1, coins: -1, achievedAt: 1 })
     ]);
 
     // Os recordes anteriores pertencem à versão de 6 rodadas e não são
     // comparáveis com a nova versão de 5 rodadas. A limpeza é idempotente:
     // em reinícios futuros, os registros da versão atual são preservados.
     await leaderboard.deleteMany({ rankingVersion: { $ne: RANKING_VERSION } });
+
+    // Migração sem reset: os recordes desta temporada que ainda não tinham
+    // nível de dificuldade passam a ter um ruleset próprio. Quando é possível
+    // identificar a partida que gerou o recorde, preservamos o nível real;
+    // caso contrário, o legado é mantido em Padrão, como definido para a temporada.
+    const legacyRankingRecords = await leaderboard
+      .find({ rankingVersion: RANKING_VERSION, ruleset: { $exists: false } })
+      .toArray();
+    for (const record of legacyRankingRecords) {
+      let inferredRuleset = 'classic';
+      const achievedAt = record.achievedAt ? new Date(record.achievedAt) : null;
+      const exactMatchQuery = {
+        status: 'finished',
+        round: 5,
+        'players': {
+          $elemMatch: {
+            name: record.nickname,
+            score: Number(record.score || 0),
+            coins: Number(record.coins || 0)
+          }
+        }
+      };
+      if (record.mode === 'solo') {
+        exactMatchQuery.mode = 'solo';
+      } else if (['2', '3', '4'].includes(String(record.mode))) {
+        exactMatchQuery.mode = { $ne: 'solo' };
+        exactMatchQuery.players = {
+          $size: Number(record.mode),
+          $elemMatch: {
+            name: record.nickname,
+            score: Number(record.score || 0),
+            coins: Number(record.coins || 0)
+          }
+        };
+      }
+      if (achievedAt && !Number.isNaN(achievedAt.getTime())) {
+        exactMatchQuery.finishedAt = {
+          $gte: new Date(achievedAt.getTime() - 10 * 60 * 1000),
+          $lte: new Date(achievedAt.getTime() + 10 * 60 * 1000)
+        };
+      }
+      let match = await matches.findOne(exactMatchQuery, { sort: { finishedAt: -1 } });
+      if (!match && record.bestMatchId) match = await matches.findOne({ _id: record.bestMatchId });
+      if (RANKING_RULESETS.includes(match?.ruleset)) inferredRuleset = match.ruleset;
+
+      const rankingPlayerId = record.rankingPlayerId || String(record._id).split(':').at(-1);
+      const newId = `${RANKING_VERSION}:${inferredRuleset}:${record.mode}:${rankingPlayerId}`;
+      const existing = await leaderboard.findOne({ _id: newId });
+      const migrated = {
+        ...record,
+        _id: newId,
+        rankingPlayerId,
+        ruleset: inferredRuleset
+      };
+      if (!existing || isBetterRankingResult(migrated, existing)) {
+        await leaderboard.replaceOne({ _id: newId }, migrated, { upsert: true });
+      }
+      if (record._id !== newId) await leaderboard.deleteOne({ _id: record._id });
+    }
 
     return { enabled: true, dbName: database.databaseName };
   } catch (error) {
@@ -442,6 +512,7 @@ async function rankingPosition(record, excludeId = null) {
   const collection = database.collection('leaderboard_records');
   const query = {
     rankingVersion: RANKING_VERSION,
+    ruleset: record.ruleset,
     mode: record.mode,
     $or: [
       { score: { $gt: record.score } },
@@ -455,21 +526,59 @@ async function rankingPosition(record, excludeId = null) {
   return betterCount + 1;
 }
 
-async function rankingLeader(mode) {
-  if (!enabled || !database || !RANKING_MODES.includes(mode)) return null;
-  const record = await database.collection('leaderboard_records')
-    .find({ rankingVersion: RANKING_VERSION, mode })
+async function historicalRankingLeader(ruleset, mode) {
+  if (!enabled || !database || !RANKING_RULESETS.includes(ruleset) || !RANKING_MODES.includes(mode)) return null;
+
+  // Os registros de partida são a fonte de verdade para recuperar recordes
+  // feitos antes da separação do Ranking Geral por dificuldade. Assim, uma
+  // partida Kids/Avançada antiga não desaparece só porque o leaderboard antigo
+  // guardava apenas um melhor resultado por quantidade de jogadores.
+  const matchFilter = {
+    status: 'finished',
+    round: 5
+  };
+  if (ruleset === 'classic') {
+    matchFilter.$or = [{ ruleset: 'classic' }, { ruleset: { $exists: false } }];
+  } else {
+    matchFilter.ruleset = ruleset;
+  }
+  if (mode === 'solo') {
+    matchFilter.mode = 'solo';
+  } else {
+    matchFilter.mode = { $ne: 'solo' };
+    matchFilter.players = { $size: Number(mode) };
+  }
+
+  const [record] = await database.collection('match_records').aggregate([
+    { $match: matchFilter },
+    { $unwind: '$players' },
+    { $sort: { 'players.score': -1, 'players.coins': -1, finishedAt: 1, _id: 1 } },
+    { $limit: 1 },
+    { $project: { _id: 0, nickname: '$players.name', score: '$players.score', coins: '$players.coins' } }
+  ]).toArray();
+  return publicRankingRecord(record);
+}
+
+async function rankingLeader(ruleset, mode) {
+  if (!enabled || !database || !RANKING_RULESETS.includes(ruleset) || !RANKING_MODES.includes(mode)) return null;
+  const stored = await database.collection('leaderboard_records')
+    .find({ rankingVersion: RANKING_VERSION, ruleset, mode })
     .sort({ score: -1, coins: -1, achievedAt: 1, _id: 1 })
     .limit(1)
     .next();
-  return publicRankingRecord(record);
+  const storedPublic = publicRankingRecord(stored);
+  const historical = await historicalRankingLeader(ruleset, mode);
+  if (!historical) return storedPublic;
+  if (!storedPublic) return historical;
+  return isBetterRankingResult(historical, storedPublic) ? historical : storedPublic;
 }
 
 async function registerRankingResults(room) {
   const mode = rankingModeForRoom(room);
-  if (!mode) return { available: false, mode: null, label: null, positions: {}, leader: null };
+  const ruleset = rankingRulesetForRoom(room);
+  if (!mode) return { available: false, ruleset, mode: null, label: null, positions: {}, leader: null };
   if (!enabled || !database) {
-    return { available: false, mode, label: rankingLabel(mode), positions: {}, leader: null };
+    return { available: false, ruleset, mode, label: rankingLabel(ruleset, mode), positions: {}, leader: null };
   }
 
   const collection = database.collection('leaderboard_records');
@@ -477,11 +586,12 @@ async function registerRankingResults(room) {
 
   for (const entry of rankingResultEntries(room)) {
     const now = new Date();
-    const documentId = `${RANKING_VERSION}:${mode}:${entry.rankingPlayerId}`;
+    const documentId = `${RANKING_VERSION}:${ruleset}:${mode}:${entry.rankingPlayerId}`;
     const existing = await collection.findOne({ _id: documentId });
     const candidate = {
       _id: documentId,
       rankingVersion: RANKING_VERSION,
+      ruleset,
       mode,
       score: entry.score,
       coins: entry.coins,
@@ -493,6 +603,7 @@ async function registerRankingResults(room) {
         _id: documentId,
         rankingPlayerId: entry.rankingPlayerId,
         rankingVersion: RANKING_VERSION,
+        ruleset,
         mode,
         nickname: entry.nickname,
         score: entry.score,
@@ -500,6 +611,7 @@ async function registerRankingResults(room) {
         achievedAt: now,
         createdAt: existing?.createdAt || now,
         lastPlayedAt: now,
+        bestMatchId: room.matchId || null,
         lastMatchId: room.matchId || null
       };
       await collection.replaceOne({ _id: documentId }, document, { upsert: true });
@@ -516,30 +628,43 @@ async function registerRankingResults(room) {
       );
     }
 
-    // A coluna da tela final representa a colocação do resultado desta partida.
-    // O registro persistente continua guardando apenas o melhor resultado do jogador.
+    // A coluna da tela final representa a colocação do resultado desta partida
+    // dentro da combinação exata de dificuldade + quantidade de jogadores.
     positions[entry.roomPlayerId] = await rankingPosition(candidate, documentId);
   }
 
   return {
     available: true,
+    ruleset,
     mode,
-    label: rankingLabel(mode),
+    label: rankingLabel(ruleset, mode),
     positions,
-    leader: await rankingLeader(mode),
+    leader: await rankingLeader(ruleset, mode),
     updatedAt: Date.now()
   };
 }
 
 async function getRankingLeaders() {
-  const leaders = {};
-  for (const mode of RANKING_MODES) {
-    leaders[mode] = {
-      label: rankingLabel(mode),
-      leader: await rankingLeader(mode)
+  const rulesets = {};
+  for (const ruleset of RANKING_RULESETS) {
+    const leaders = {};
+    for (const mode of RANKING_MODES) {
+      leaders[mode] = {
+        label: rankingModeLabel(mode),
+        leader: await rankingLeader(ruleset, mode)
+      };
+    }
+    rulesets[ruleset] = {
+      label: RANKING_RULESET_LABELS[ruleset],
+      leaders
     };
   }
-  return { available: Boolean(enabled && database), leaders };
+  return {
+    available: Boolean(enabled && database),
+    rulesets,
+    // Compatibilidade com clientes antigos: o bloco legado aponta para Padrão.
+    leaders: rulesets.classic.leaders
+  };
 }
 
 async function addServerEvent(type, message, extra = {}) {

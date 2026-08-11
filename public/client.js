@@ -9,7 +9,7 @@
 
   const COLORS = ['yellow', 'white', 'red', 'gray'];
   const COLOR_LABELS = { yellow: 'Amarela', white: 'Branca', red: 'Vermelha', gray: 'Cinza' };
-  const RULESET_LABELS = { classic: 'Intermediária', advanced: 'Avançada', kids: 'Kids' };
+  const RULESET_LABELS = { classic: 'Padrão', advanced: 'Avançado', kids: 'Kids' };
   const RULESET_SUMMARIES = {
     classic: 'Jogo-base com carpas, plantas e as quatro peças especiais.',
     advanced: 'Adiciona Anzol, Rede, Garça e Gato ao setup e à movimentação.',
@@ -49,7 +49,10 @@
     hook: '/assets/anzol.mp3',
     net: '/assets/rede.mp3',
     heron: '/assets/garca.mp3',
-    cat: '/assets/gato.mp3'
+    cat: '/assets/gato.mp3',
+    roundStart: '/assets/iniciorodada.mp3',
+    coins: '/assets/coins.mp3',
+    undo: '/assets/desfazerjogada.mp3'
   };
   const SOUND_VOLUMES = {
     move: 0.46,
@@ -58,7 +61,10 @@
     hook: 0.60,
     net: 0.60,
     heron: 0.60,
-    cat: 0.60
+    cat: 0.60,
+    roundStart: 0.62,
+    coins: 1.0,
+    undo: 0.62
   };
   const soundBases = Object.fromEntries(Object.entries(SOUND_URLS).map(([key, src]) => {
     const audio = new Audio(src);
@@ -149,7 +155,7 @@
         if (!response?.ok) {
           const message = response?.error || 'Não foi possível concluir a ação.';
           if (!options.silent) {
-            if (['movePiece', 'finishMovement', 'undoMove', 'buyExtraMove'].includes(event)) {
+            if (['movePiece', 'finishMovement', 'buyExtraMove'].includes(event) || (event === 'undoMove' && state?.phase === 'movement')) {
               movementError = message;
               notice = '';
             } else {
@@ -193,15 +199,16 @@
     if (!action || Date.now() - Number(action.at || 0) > 3500) return;
 
     if (action.type === 'move' || action.type === 'correctionMove') {
-      // O efeito automático tem prioridade sonora sobre o som do movimento que o disparou.
+      // Ativações automáticas das peças avançadas continuam globais: todos ouvem.
       const advancedEffect = advancedActivationSoundType(action);
       if (advancedEffect) {
         playSound(advancedEffect);
         return;
       }
 
-      // Anzol/Rede usam seu próprio som quando movidos. Garça/Gato acompanham a planta
-      // em que estão sobrepostos e também usam seu som quando essa planta é movida.
+      // Movimentos comuns e deslocamentos manuais de peças avançadas são locais:
+      // somente o jogador que realizou a jogada ouve em sua própria tela.
+      if (action.playerId !== identity.memberId) return;
       const movedAdvanced = manuallyMovedAdvancedSoundType(action);
       if (movedAdvanced) {
         playSound(movedAdvanced);
@@ -212,9 +219,25 @@
       return;
     }
 
-    if (action.type === 'undo') playSound('move');
-    if (action.type === 'circulationStart') playSound('current');
-    if (action.type === 'replace') playSound('replace');
+    // Desfazer é um acontecimento global da partida.
+    if (action.type === 'undo' || action.type === 'undoDevelopment') {
+      playSound('undo');
+      return;
+    }
+
+    if (action.type === 'circulationStart') {
+      playSound('current');
+      return;
+    }
+
+    // Na venda, somente quem recebeu a moeda ouve o som.
+    if (action.type === 'replace') {
+      if (action.playerId === identity.memberId) playSound('coins');
+      return;
+    }
+
+    // A compra de movimento extra é anunciada para todos com o som de moedas.
+    if (action.type === 'extraMovePurchased') playSound('coins');
   }
 
 
@@ -236,6 +259,8 @@
     if (!round || lastRoundIntroShown === introKey || !roomIsAtRoundMovementStart(room)) return;
     lastRoundIntroShown = introKey;
     roundIntroRound = round;
+    // O aviso de início de rodada e seu som são locais a cada jogador.
+    if (identity.role === 'player') playSound('roundStart');
     if (roundIntroTimer) clearTimeout(roundIntroTimer);
     roundIntroTimer = window.setTimeout(() => {
       if (roundIntroRound === round) {
@@ -334,6 +359,22 @@
     if (isCompactMobile() && identity.role === 'player' && playerId !== identity.memberId) return emptyAnimation;
     const action = state.lastAction;
 
+    const advancedLunge = action.playerId === playerId
+      ? action.advanced?.captures?.find((capture) =>
+        capture.activationPieceId === piece.id
+        && capture.activationPosition?.row === row
+        && capture.activationPosition?.col === col
+        && capture.capturedPosition
+      )
+      : null;
+    if (advancedLunge) {
+      return {
+        ...emptyAnimation,
+        shellClass: 'animate-advanced-capture-lunge',
+        shellStyle: `--capture-x:${advancedLunge.capturedPosition.col - col};--capture-y:${advancedLunge.capturedPosition.row - row};`
+      };
+    }
+
     if ((action.type === 'move' || action.type === 'correctionMove') && action.playerId === playerId) {
       if (action.pieceId === piece.id && action.to?.row === row && action.to?.col === col) {
         const dx = action.from.col - action.to.col;
@@ -381,7 +422,7 @@
       return { ...emptyAnimation, shellClass: 'animate-replace advanced-capture-replacement' };
     }
 
-    if (action.type === 'undo' && action.playerId === playerId && action.positions?.some((position) => position.row === row && position.col === col)) {
+    if (['undo', 'undoDevelopment'].includes(action.type) && action.playerId === playerId && action.positions?.some((position) => position.row === row && position.col === col)) {
       return { ...emptyAnimation, shellClass: 'animate-undo', shellStyle: `--undo-delay:${(row * state.constants.cols + col) * 10}ms;` };
     }
 
@@ -469,10 +510,15 @@
             ? 'special-effect-moved-art'
             : ((overlayMovedWithPlant || lastMoved) ? 'last-moved-art' : '');
           const animateOverlayJump = Boolean(animateCurrentAction && overlayJump && state.lastAction.from);
-          const overlayMotionClass = animateOverlayJump ? 'animate-advanced-overlay-jump' : '';
-          const overlayMotionStyle = animateOverlayJump
-            ? `--overlay-move-x:${overlayJump.from.col - state.lastAction.from.col};--overlay-move-y:${overlayJump.from.row - state.lastAction.from.row};`
-            : '';
+          const animateOverlayCapture = Boolean(animateCurrentAction && overlayCapture?.capturedPosition);
+          const overlayMotionClass = animateOverlayCapture
+            ? 'animate-advanced-overlay-capture'
+            : (animateOverlayJump ? 'animate-advanced-overlay-jump' : '');
+          const overlayMotionStyle = animateOverlayCapture
+            ? `--capture-x:${overlayCapture.capturedPosition.col - col};--capture-y:${overlayCapture.capturedPosition.row - row};`
+            : (animateOverlayJump
+              ? `--overlay-move-x:${overlayJump.from.col - state.lastAction.from.col};--overlay-move-y:${overlayJump.from.row - state.lastAction.from.row};`
+              : '');
           return `<span class="advanced-overlay-motion ${overlayMotionClass}" style="${overlayMotionStyle}"><span class="advanced-overlay-position" style="--overlay-index:${index}"><span class="advanced-overlay-facing" style="--advanced-facing-scale:${facingScale}"><img class="advanced-overlay-art advanced-overlay-${overlay.type} ${overlayEmphasisClass}" src="${ASSETS[overlay.type]}" alt="" title="${overlayLabel}" aria-hidden="true" draggable="false"></span></span></span>`;
         }).join('')
       : '';
@@ -501,6 +547,16 @@
   }
 
 
+  function advancedCaptureGhostHtml(playerId, row, col) {
+    if (!animateCurrentAction || !state?.lastAction || state.lastAction.playerId !== playerId) return '';
+    if (isCompactMobile() && identity.role === 'player' && playerId !== identity.memberId) return '';
+    const capture = state.lastAction.advanced?.captures?.find((item) =>
+      item.capturedPosition?.row === row && item.capturedPosition?.col === col
+    );
+    if (!capture?.capturedColor || !ASSETS[capture.capturedColor]) return '';
+    return `<span class="captured-carp-ghost" aria-hidden="true"><img src="${ASSETS[capture.capturedColor]}" alt=""></span>`;
+  }
+
   function boardHtml(player, { interactive = false, miniature = false, spectator = false } = {}) {
     if (!player?.board) return '<div class="tank-placeholder">Aguardando início</div>';
     const current = me();
@@ -517,6 +573,7 @@
         cells.push(`
           <button class="tank-cell ${middle} ${canReplace ? 'replaceable' : ''}" ${interactive ? '' : 'disabled'} data-row="${rowIndex}" data-col="${colIndex}" aria-label="Linha ${rowIndex + 1}, coluna ${colIndex + 1}">
             ${createPieceHtml(piece, player.id, rowIndex, colIndex, { tiny: miniature })}
+            ${advancedCaptureGhostHtml(player.id, rowIndex, colIndex)}
           </button>`);
       });
     });
@@ -572,7 +629,7 @@
             </section>`;
           }).join('')}</div>`;
 
-    return `<div class="modal-backdrop ranking-leaders-backdrop"><section class="modal-card ranking-leaders-card"><p class="eyebrow">Ranking Geral</p><h2>Maiores pontuações por nível</h2>${content}<button class="secondary-button close-ranking-leaders" type="button">Voltar</button></section></div>`;
+    return `<div class="modal-backdrop ranking-leaders-backdrop"><section class="modal-card ranking-leaders-card"><p class="eyebrow">Ranking Geral</p><h2>Maiores pontuações por dificuldade</h2>${content}<button class="secondary-button close-ranking-leaders" type="button">Voltar</button></section></div>`;
   }
 
   async function openRankingLeaders() {
@@ -673,7 +730,9 @@
         'Escolha a menor cor presente entre as demais.',
         'Troque as peças da menor cor até ela acabar.',
         'Se ela acabar antes do total conquistado, escolha a próxima menor cor.',
-        'Cada carpa retirada rende 1 moeda imediatamente.'
+        'Cada carpa retirada rende 1 moeda imediatamente.',
+        'Use Desfazer jogada para voltar a última reposição enquanto esta fase estiver aberta.',
+        'Quando terminar, revise as trocas e clique em Concluir venda e reposição.'
       ];
     }
     if (state.phase === 'circulation') {
@@ -691,7 +750,7 @@
             'A fase de Venda e reposição começa depois da Correnteza.'
           ];
     }
-    if (state.mode === 'solo') return ['Some as carpas preferidas que saíram pela Correnteza às que ficaram no tanque.', 'Esse total é o seu resultado solo.', 'Sua colocação entra no Ranking Geral — Solo.'];
+    if (state.mode === 'solo') return ['Some as carpas preferidas que saíram pela Correnteza às que ficaram no tanque.', 'Esse total é o seu resultado solo.', 'Sua colocação entra no Ranking Geral da dificuldade jogada — Solo.'];
     return ['Conte todas as carpas de cada cor nos tanques.', 'A maior pontuação vence.', 'Em empate de carpas, vence quem tiver mais moedas.'];
   }
 
@@ -858,9 +917,14 @@
     });
   }
 
+  function developmentIsConfirmed(development) {
+    if (!development) return false;
+    return development.confirmed === undefined ? Boolean(development.done) : Boolean(development.confirmed);
+  }
+
   function playerHasFinishedCurrentPhase(player) {
     if (state.phase === 'movement') return Boolean(player?.movementReady);
-    if (state.phase === 'development') return Boolean(player?.development?.done);
+    if (state.phase === 'development') return developmentIsConfirmed(player?.development);
     return false;
   }
 
@@ -876,7 +940,8 @@
       return { text: 'Movimentando', waiting: false };
     }
     if (state.phase === 'development') {
-      if (player.development?.done) return { text: 'Fase concluída', waiting: false };
+      if (developmentIsConfirmed(player.development)) return { text: 'Fase concluída', waiting: false };
+      if (player.development?.done) return { text: 'revisando reposição', waiting: false };
       if (spectatorView || viewerHasFinishedCurrentPhase()) return { text: 'aguardando jogador concluir', waiting: true };
       return { text: 'repondo peças', waiting: false };
     }
@@ -905,13 +970,35 @@
     return `<span class="opponent-move-counter" title="${completed} de ${limit} movimentos realizados"><b>${completed}</b>/${limit} mov.</span>`;
   }
 
+  function circulationNeighbors(playerId) {
+    const order = state.playerOrder || [];
+    const index = order.indexOf(playerId);
+    if (index < 0 || order.length < 2) return { sendsTo: null, receivesFrom: null, neutral: [] };
+    const receivesFrom = order[(index - 1 + order.length) % order.length];
+    const sendsTo = order[(index + 1) % order.length];
+    const neutral = order.filter((id) => id !== playerId && id !== receivesFrom && id !== sendsTo);
+    return { sendsTo, receivesFrom, neutral };
+  }
+
+  function orderedOpponentIds() {
+    const { sendsTo, receivesFrom, neutral } = circulationNeighbors(identity.memberId);
+    return [receivesFrom, ...neutral, sendsTo].filter((id, index, items) => id && id !== identity.memberId && items.indexOf(id) === index);
+  }
+
+  function opponentFlowBadgesHtml(opponentId) {
+    const { sendsTo, receivesFrom } = circulationNeighbors(identity.memberId);
+    const badges = [];
+    if (opponentId === receivesFrom) badges.push('<span class="opponent-flow-badge incoming">Envia peças para você</span>');
+    if (opponentId === sendsTo) badges.push('<span class="opponent-flow-badge outgoing">Você envia peças para este jogador</span>');
+    return badges.length ? `<div class="opponent-flow-badges">${badges.join('')}</div>` : '<div class="opponent-flow-badges neutral"><span class="opponent-flow-badge neutral">Sem troca direta com você</span></div>';
+  }
+
   function opponentsHtml() {
-    return state.playerOrder
-      .filter((id) => id !== identity.memberId)
+    return orderedOpponentIds()
       .map((id) => {
         const player = state.players[id];
         const status = playerPhaseStatus(player);
-        return `<article class="opponent-card"><header>${playerNameChip(player)}${colorBadge(player.color)}</header>${boardHtml(player, { miniature: true })}<footer class="${status.waiting ? 'phase-waiting-footer' : ''}"><span class="opponent-status-text"><span class="connection ${player.connected ? 'online' : ''}"></span>${status.text}</span>${opponentMovementCounterHtml(player)}</footer></article>`;
+        return `<article class="opponent-card"><header>${playerNameChip(player)}${colorBadge(player.color)}</header>${opponentFlowBadgesHtml(id)}${boardHtml(player, { miniature: true })}<footer class="${status.waiting ? 'phase-waiting-footer' : ''}"><span class="opponent-status-text"><span class="connection ${player.connected ? 'online' : ''}"></span>${status.text}</span>${opponentMovementCounterHtml(player)}</footer></article>`;
       }).join('');
   }
 
@@ -943,14 +1030,14 @@
     const specialItems = [
       { key: 'shoal', name: 'Tesourinhas', text: 'Pode mover manualmente ao vazio por 1. Ao ativar, invade o vazio adjacente por 1.' },
       { key: 'sturgeon', name: 'Esturjão', text: 'Pode mover manualmente ao vazio por 1. Ao ativar, empurra linha/coluna por 2.' },
-      { key: 'dojo', name: 'Dojô', text: 'Pode mover manualmente ao vazio por 1. Ao ativar, atravessa a diagonal por 1.' },
+      { key: 'dojo', name: 'Dojô', text: 'Pode mover manualmente ao vazio por 1. Ao ativar, atravessa a diagonal (✕) por 1.' },
       { key: 'papaTerra', name: 'Papa-terra', text: 'Pode mover manualmente ao vazio por 1. Sua troca automática continua grátis.' }
     ];
     const advancedItems = [
-      { key: 'hook', name: 'Anzol', text: 'Captura sua carpa preferida quando ela está adjacente ao Anzol, entre ele e o vazio, e se move para esse vazio afastando-se do Anzol.' },
-      { key: 'net', name: 'Rede', text: 'Captura a carpa preferida que for movida para uma casa ortogonalmente ao lado dela.' },
-      { key: 'heron', name: 'Garça', text: 'Fica sobre uma planta. Salta para a planta movida na mesma diagonal e arma captura da preferida no vazio adjacente à nova planta.' },
-      { key: 'cat', name: 'Gato', text: 'Fica sobre uma planta. Salta para a planta movida na mesma linha/coluna e arma captura da preferida no vazio adjacente à nova planta.' }
+      { key: 'hook', name: 'Anzol', text: 'Captura sua carpa preferida quando ela está ortogonalmente (✚) adjacente ao Anzol, entre ele e o vazio, e se move para esse vazio. A substituta entra na casa original, ao lado do Anzol, e o destino volta a ser o vazio.' },
+      { key: 'net', name: 'Rede', text: 'Captura a carpa preferida que for movida para uma casa ortogonalmente (✚) adjacente a ela.' },
+      { key: 'heron', name: 'Garça', text: 'Fica sobre uma planta. Salta para uma planta movida na mesma diagonal (✕). Enquanto permanecer sobre a planta, captura a preferida movida para um vazio ortogonalmente (✚) adjacente a ela.' },
+      { key: 'cat', name: 'Gato', text: 'Fica sobre uma planta. Salta para uma planta movida na mesma linha/coluna. Enquanto permanecer sobre a planta, captura a preferida movida para um vazio ortogonalmente (✚) adjacente a ela.' }
     ];
 
     const items = [
@@ -1001,10 +1088,10 @@
     const totalMoves = current.moveLimit || state.constants.movesPerRound;
     const completed = Math.max(0, totalMoves - current.movesRemaining);
     let instruction = state.ruleset === 'kids'
-      ? 'Clique em uma peça ortogonalmente adjacente ao espaço vazio.'
+      ? 'Clique em uma peça ortogonalmente (✚) adjacente ao espaço vazio.'
       : state.ruleset === 'advanced'
-        ? 'Clique em uma peça ortogonalmente adjacente ao vazio. Anzol e Rede também se movem normalmente por 1; Garça e Gato permanecem sobre plantas.'
-        : 'Clique em uma peça ortogonalmente adjacente ao espaço vazio. Peças especiais também podem ser movidas manualmente por 1 movimento.';
+        ? 'Clique em uma peça ortogonalmente (✚) adjacente ao vazio. Anzol e Rede também se movem normalmente por 1; Garça e Gato permanecem sobre plantas.'
+        : 'Clique em uma peça ortogonalmente (✚) adjacente ao espaço vazio. Peças especiais também podem ser movidas manualmente por 1 movimento.';
     if (current.mustMoveCarp) instruction = 'A alga foi movida: agora mova obrigatoriamente uma carpa.';
     if (current.correctionRequired) instruction = 'Preencha o vazio da linha central usando a peça imediatamente acima ou abaixo, ou compre um movimento extra.';
     if (current.movementDeadEnd) instruction = 'Você ficou sem movimento válido para completar o numero total e exato de 12 de movimentos. Clique em “Desfazer jogada” e escolha outro caminho.';
@@ -1048,6 +1135,9 @@
     const dev = current.development;
     if (!dev) return '<section class="action-panel"><h2>Preparando a venda e reposição...</h2></section>';
     if (dev.done) {
+      if (!developmentIsConfirmed(dev)) {
+        return `<section class="action-panel"><p class="phase-kicker">Fase de Venda e reposição</p><h2>Revise suas reposições</h2><div class="replacement-score"><strong>${dev.replaced}</strong><span>/ ${dev.capacity}</span></div><p>As reposições foram completadas. Você ainda pode usar <strong>Desfazer jogada</strong> para voltar uma troca antes de confirmar.</p><button id="finishDevelopment" class="primary-button">Concluir venda e reposição</button></section>`;
+      }
       const waitMessage = waitingForOtherPlayersMessage();
       return `<section class="action-panel"><p class="phase-kicker">Fase de Venda e reposição</p><h2>Venda e reposição concluída</h2><div class="replacement-score"><strong>${dev.replaced}</strong><span>/ ${dev.capacity}</span></div><p>Você recebeu ${dev.replaced} moeda(s) nesta fase. ${waitMessage || 'Preparando a próxima rodada.'}</p>${waitMessage ? '<button class="secondary-button try-next-phase" data-wait-phase="development">Continuar para a próxima fase</button>' : ''}</section>`;
     }
@@ -1070,7 +1160,7 @@
 
   function rankingModeLabel() {
     if (state?.rankingGeneral?.label) return state.rankingGeneral.label;
-    const rulesetLabel = RULESET_LABELS[state?.ruleset || 'classic'] || 'Intermediária';
+    const rulesetLabel = RULESET_LABELS[state?.ruleset || 'classic'] || 'Padrão';
     const modeLabel = state?.mode === 'solo' ? 'Solo' : `${state?.playerOrder?.length || 0} jogadores`;
     return `${rulesetLabel} — ${modeLabel}`;
   }
@@ -1273,11 +1363,13 @@
     const preferredInMiddle = current.board
       ? current.board[state.constants.middleRow].filter((piece) => piece?.type === 'carp' && piece.color === current.color).length
       : 0;
+    const canUndo = state.phase === 'movement'
+      ? !current.movementReady && current.movementHistoryLength > 0
+      : state.phase === 'development' && !developmentIsConfirmed(current.development) && current.developmentHistoryLength > 0;
 
     app.innerHTML = `
       <div class="game-shell ${layout}">
         ${topbarHtml()}
-        ${roundIntroHtml()}
         ${notice ? `<div class="notice error floating">${escapeHtml(notice)}</div>` : ''}
         ${restartUiHtml()}
         ${exitUiHtml()}
@@ -1294,10 +1386,13 @@
               <div class="tank-player-heading"><p class="eyebrow">Seu tanque</p><div class="player-title-line"><h1>${escapeHtml(current.name)}</h1><span class="preferred-carp-label">Sua carpa preferida:<img src="${ASSETS[current.color]}" alt="Carpa ${COLOR_LABELS[current.color]}"></span></div></div>
               <div class="tank-header-actions">
                 <div class="middle-count">Sua cor na linha <strong>${preferredInMiddle}</strong></div>
-                <button id="undoMove" class="undo-button" ${state.phase !== 'movement' || current.movementReady || !current.movementHistoryLength ? 'disabled' : ''}>↶ Desfazer jogada</button>
+                <button id="undoMove" class="undo-button" ${canUndo ? '' : 'disabled'}>↶ Desfazer jogada</button>
               </div>
             </header>
-            ${boardHtml(current, { interactive: state.phase === 'movement' || state.phase === 'development' })}
+            <div class="player-board-wrap">
+              ${boardHtml(current, { interactive: state.phase === 'movement' || state.phase === 'development' })}
+              ${roundIntroHtml()}
+            </div>
           </section>
           ${mobilePhaseActionHtml(current)}
           <aside class="right-rail">${panel}${logPanelHtml()}</aside>
@@ -1320,6 +1415,7 @@
     });
     document.querySelector('#buyExtraMove')?.addEventListener('click', () => emit('buyExtraMove'));
     document.querySelector('#finishMovement')?.addEventListener('click', () => emit('finishMovement'));
+    document.querySelector('#finishDevelopment')?.addEventListener('click', () => emit('finishDevelopment'));
     document.querySelectorAll('.color-target').forEach((button) => button.addEventListener('click', () => emit('chooseDevelopmentColor', { color: button.dataset.color })));
     document.querySelectorAll('.try-next-phase').forEach((button) => button.addEventListener('click', () => {
       const message = waitingForOtherPlayersMessage();

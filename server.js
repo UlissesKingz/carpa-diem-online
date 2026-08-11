@@ -19,6 +19,7 @@ const {
   markMovementReady,
   chooseDevelopmentColor,
   replaceFish,
+  markDevelopmentReady,
   completeCirculation,
   publicRoom,
   allPlayersConnected
@@ -614,6 +615,14 @@ io.on('connection', (socket) => {
     replaceFish(room, socket.data.memberId, payload.position || {});
     emitRoom(room);
     return {};
+  }));
+
+  socket.on('finishDevelopment', safeHandler(socket, () => {
+    const room = roomForSocket(socket);
+    if (socket.data.memberRole !== 'player') throw new Error('Espectadores não podem concluir a reposição.');
+    const result = markDevelopmentReady(room, socket.data.memberId);
+    emitRoom(room);
+    return result;
   }));
 
   socket.on('disconnect', (reason) => {

@@ -97,18 +97,27 @@
     }
 
     const modes = ['solo', '2', '3', '4'];
-    return `<div class="ranking-leaders-grid">${modes.map((mode) => {
-      const item = data?.leaders?.[mode];
-      const leader = item?.leader;
-      const label = item?.label || (mode === 'solo' ? 'Solo' : `${mode} jogadores`);
-      const score = Number(leader?.score || 0);
-      const coins = Number(leader?.coins || 0);
-      return `<article class="ranking-leader-mode">
-        <p class="eyebrow">${escapeHtml(label)}</p>
-        ${leader
-          ? `<strong>${escapeHtml(leader.nickname)}</strong><span>${score} carpas · ${coins} moeda${coins === 1 ? '' : 's'}</span>`
-          : '<strong>Sem recorde</strong><span>Ainda não há resultado registrado.</span>'}
-      </article>`;
+    const rulesetOrder = ['kids', 'classic', 'advanced'];
+    const labels = { kids: 'Kids', classic: 'Padrão', advanced: 'Avançado' };
+    return `<div class="ranking-difficulty-groups">${rulesetOrder.map((ruleset) => {
+      const group = data?.rulesets?.[ruleset];
+      const fallbackLeaders = ruleset === 'classic' ? data?.leaders : null;
+      return `<section class="ranking-difficulty-group">
+        <h3>${escapeHtml(group?.label || labels[ruleset])}</h3>
+        <div class="ranking-leaders-grid">${modes.map((mode) => {
+          const item = group?.leaders?.[mode] || fallbackLeaders?.[mode];
+          const leader = item?.leader;
+          const label = item?.label || (mode === 'solo' ? 'Solo' : `${mode} jogadores`);
+          const score = Number(leader?.score || 0);
+          const coins = Number(leader?.coins || 0);
+          return `<article class="ranking-leader-mode">
+            <p class="eyebrow">${escapeHtml(label)}</p>
+            ${leader
+              ? `<strong>${escapeHtml(leader.nickname)}</strong><span>${score} carpas · ${coins} moeda${coins === 1 ? '' : 's'}</span>`
+              : '<strong>Sem recorde</strong><span>Ainda não há resultado registrado.</span>'}
+          </article>`;
+        }).join('')}</div>
+      </section>`;
     }).join('')}</div>`;
   }
 
@@ -123,7 +132,7 @@
     backdrop.innerHTML = `
       <section class="modal-card ranking-leaders-card">
         <p class="eyebrow">Ranking Geral</p>
-        <h2 id="globalRankingTitle">Maiores pontuações</h2>
+        <h2 id="globalRankingTitle">Maiores pontuações por dificuldade</h2>
         <div class="global-ranking-content"><p class="ranking-leaders-loading">Carregando os maiores pontuadores...</p></div>
         <button class="secondary-button close-global-ranking" type="button">Voltar</button>
       </section>`;

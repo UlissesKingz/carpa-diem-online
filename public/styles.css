@@ -297,6 +297,36 @@ legend { margin-bottom: 10px; font-weight: 850; }
   box-shadow: 0 12px 30px rgba(0, 0, 0, .2);
 }
 .opponent-card footer { justify-content: flex-start; margin-top: 8px; color: var(--muted); font-size: .75rem; }
+.opponent-flow-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-height: 24px;
+  margin: 5px 0 7px;
+}
+.opponent-flow-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 7px;
+  border: 1px solid rgba(102, 214, 202, .18);
+  border-radius: 999px;
+  color: #c9e9e6;
+  background: rgba(102, 214, 202, .07);
+  font-size: .64rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+.opponent-flow-badge.outgoing {
+  border-color: rgba(241, 201, 92, .2);
+  color: #f7e7aa;
+  background: rgba(241, 201, 92, .07);
+}
+.opponent-flow-badge.neutral {
+  border-color: rgba(255, 255, 255, .08);
+  color: var(--muted);
+  background: rgba(255, 255, 255, .025);
+}
 
 .game-stage {
   display: grid;
@@ -662,6 +692,32 @@ legend { margin-bottom: 10px; font-weight: 850; }
   animation: advancedOverlayJump .72s cubic-bezier(.18, .82, .2, 1) both;
   will-change: transform;
 }
+.animate-advanced-capture-lunge {
+  z-index: 14;
+  animation: advancedCaptureLunge .92s cubic-bezier(.16, .84, .2, 1) both;
+  will-change: transform;
+}
+.animate-advanced-overlay-capture {
+  z-index: 14;
+  animation: advancedCaptureLunge .92s cubic-bezier(.16, .84, .2, 1) both;
+  will-change: transform;
+}
+.captured-carp-ghost {
+  position: absolute;
+  z-index: 10;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  animation: capturedCarpGhost .92s ease both;
+}
+.captured-carp-ghost img {
+  display: block;
+  width: 48%;
+  height: 80%;
+  object-fit: contain;
+  filter: drop-shadow(10px 12px 5px rgba(0, 0, 0, .62));
+}
 
 @keyframes slidePiece {
   0% { transform: translate(calc(var(--move-x) * 111%), calc(var(--move-y) * 111%)) scale(.97); }
@@ -687,6 +743,18 @@ legend { margin-bottom: 10px; font-weight: 850; }
   100% {
     transform: translate(0, 0) scale(1);
   }
+}
+@keyframes advancedCaptureLunge {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  40% { transform: translate(calc(var(--capture-x) * 111%), calc(var(--capture-y) * 111%)) scale(1.09); }
+  58% { transform: translate(calc(var(--capture-x) * 111%), calc(var(--capture-y) * 111%)) scale(1.14); }
+  72% { transform: translate(calc(var(--capture-x) * 42%), calc(var(--capture-y) * 42%)) scale(1.04); }
+}
+@keyframes capturedCarpGhost {
+  0%, 35% { opacity: 1; transform: scale(1); }
+  52% { opacity: .95; transform: scale(.9); }
+  63% { opacity: 0; transform: scale(.28); }
+  100% { opacity: 0; transform: scale(.28); }
 }
 @keyframes replacePiece {
   0% { opacity: 0; transform: translateY(-18%) rotate(-8deg) scale(.18); }
@@ -2473,9 +2541,27 @@ body[data-layout="mobile"] .animate-line-in {
   z-index: 118;
   display: grid;
   place-items: center;
+  box-sizing: border-box;
   pointer-events: none;
   background: rgba(4, 10, 15, .18);
   animation: roundStartBackdrop 1.7s ease forwards;
+}
+
+/* No jogo do participante, o aviso fica centralizado sobre o próprio tabuleiro. */
+.player-board-wrap {
+  position: relative;
+}
+
+.player-board-wrap .round-start-announcement {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  place-items: center;
+  padding: 0;
+}
+
+.player-board-wrap .round-start-announcement strong {
+  width: min(92%, 620px);
 }
 
 .round-start-announcement strong {
@@ -2598,4 +2684,19 @@ body[data-layout="mobile"] .animate-line-in {
   .manual-scene .advanced-animation-placeholder {
     min-height: 82px;
   }
+}
+
+/* Fluxo da Correnteza entre adversários */
+body[data-layout="mobile"] .opponent-flow-badges { margin: 4px 0 6px; }
+body[data-layout="mobile"] .opponent-flow-badge { font-size: .58rem; padding: 3px 6px; }
+
+/* A carpa substituta só aparece depois do bote da peça avançada. */
+.animate-replace.advanced-capture-replacement {
+  animation: advancedReplacementAppear 1.02s cubic-bezier(.18, .84, .2, 1) both;
+}
+
+@keyframes advancedReplacementAppear {
+  0%, 62% { opacity: 0; transform: scale(.62); }
+  78% { opacity: 1; transform: scale(1.12); }
+  100% { opacity: 1; transform: scale(1); }
 }

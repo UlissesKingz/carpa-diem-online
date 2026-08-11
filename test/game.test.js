@@ -17,6 +17,8 @@ const {
   replaceFish,
   buyExtraMove,
   markMovementReady,
+  markDevelopmentReady,
+  setGameRuleset,
   finishGame
 } = require('../src/game');
 
@@ -59,7 +61,7 @@ test('cria a preparação equilibrada com centro vazio', () => {
   assert.equal(specials.length, 2);
   assert.equal(new Set(specials.map((piece) => piece.type)).size, 2);
   assert.equal(publicRoom(room).constants.movesPerRound, 12);
-  assert.equal(publicRoom(room).constants.maxRounds, 6);
+  assert.equal(publicRoom(room).constants.maxRounds, 5);
 });
 
 test('espectador entra sem ocupar cor ou vaga de jogador', () => {
@@ -193,6 +195,10 @@ test('reposição continua para a próxima menor cor e cada retirada rende uma m
   replaceFish(room, player.id, positionOf('red'));
   replaceFish(room, player.id, positionOf('gray'));
   assert.equal(player.coins, 4);
+  assert.equal(room.phase, 'development');
+  assert.equal(player.development.done, true);
+  assert.equal(player.development.confirmed, false);
+  markDevelopmentReady(room, player.id);
   assert.equal(room.round, 2);
   assert.equal(room.phase, 'movement');
 });
@@ -274,7 +280,7 @@ test('Dojô atravessa a diagonal até o vazio por 1 movimento', () => {
   assert.equal(player.movesRemaining, 10);
 });
 
-test('Esturjão empurra a sequência em direção ao vazio por 3 movimentos', () => {
+test('Esturjão empurra a sequência em direção ao vazio por 2 movimentos', () => {
   const room = makeTwoPlayerRoom(); startGame(room, room.hostId); const player = room.players[room.hostId]; player.board = blankBoard();
   player.board[2][2] = { id: 'move', type: 'carp', color: 'yellow', rotation: 0 };
   player.board[2][0] = { id: 'sturgeon', type: 'sturgeon', rotation: 0 };
@@ -283,7 +289,7 @@ test('Esturjão empurra a sequência em direção ao vazio por 3 movimentos', ()
   assert.equal(player.board[2][0], null);
   assert.equal(player.board[2][1]?.type, 'sturgeon');
   assert.equal(player.board[2][2]?.id, 'between');
-  assert.equal(player.movesRemaining, 8);
+  assert.equal(player.movesRemaining, 9);
 });
 
 test('jogador pronto recebe aviso nominal enquanto aguarda a fase dos demais', () => {
@@ -349,4 +355,91 @@ test('espectadores podem acompanhar uma sala solo', () => {
   const room = createRoom({ hostName: 'Ana', color: 'yellow', socketId: 'a', mode: 'solo' });
   const spectator = addSpectator(room, { name: 'Visitante', socketId: 'v' }); startGame(room, room.hostId);
   assert.equal(publicRoom(room).spectators[spectator.id].name, 'Visitante');
+});
+
+
+test('Anzol repõe a nova carpa na casa original adjacente e devolve o vazio ao destino', () => {
+  const room = makeTwoPlayerRoom();
+  setGameRuleset(room, room.hostId, 'advanced');
+  startGame(room, room.hostId);
+  const player = room.players[room.hostId];
+  player.board = blankBoard();
+  player.board[2][1] = { id: 'hook-advanced', type: 'hook', rotation: 0 };
+  player.board[2][2] = { id: 'preferred-hook', type: 'carp', color: player.color, rotation: 0 };
+  player.movesRemaining = 12;
+  player.movementHistory = [];
+
+  movePiece(room, player.id, { row: 2, col: 2 });
+
+  assert.equal(player.board[2][1]?.type, 'hook');
+  assert.equal(player.board[2][2]?.type, 'carp');
+  assert.notEqual(player.board[2][2]?.color, player.color);
+  assert.equal(player.board[2][3], null);
+  const capture = room.lastAction.advanced.captures[0];
+  assert.deepEqual(capture.capturedPosition, { row: 2, col: 3 });
+  assert.deepEqual(capture.replacementPosition, { row: 2, col: 2 });
+  assert.equal(capture.activationPieceId, 'hook-advanced');
+});
+
+for (const [type, label] of [['heron', 'Garça'], ['cat', 'Gato']]) {
+  test(`${label} mantém a ameaça de captura enquanto permanece sobre a planta`, () => {
+    const room = makeTwoPlayerRoom();
+    setGameRuleset(room, room.hostId, 'advanced');
+    startGame(room, room.hostId);
+    const player = room.players[room.hostId];
+    player.board = blankBoard();
+    player.board[2][2] = {
+      id: `plant-${type}`,
+      type: 'algae',
+      rotation: 0,
+      overlays: [{ id: `overlay-${type}`, type }]
+    };
+    player.board[2][4] = { id: `preferred-${type}`, type: 'carp', color: player.color, rotation: 0 };
+    player.advancedTrapArmed = [];
+    player.movesRemaining = 12;
+    player.movementHistory = [];
+
+    movePiece(room, player.id, { row: 2, col: 4 });
+
+    const capture = room.lastAction.advanced.captures[0];
+    assert.equal(capture.activationType, type);
+    assert.equal(capture.activationOverlayId, `overlay-${type}`);
+    assert.notEqual(player.board[2][3]?.color, player.color);
+  });
+}
+
+test('última reposição pode ser desfeita antes da confirmação da fase', () => {
+  const room = createRoom({ hostName: 'Ana', color: 'yellow', socketId: 'a', mode: 'solo' });
+  startGame(room, room.hostId);
+  const player = room.players[room.hostId];
+  player.board = blankBoard();
+  const carps = player.board.flat().filter((piece) => piece?.type === 'carp');
+  carps.forEach((piece, index) => { piece.color = index === 0 ? 'gray' : (index % 2 ? 'white' : 'red'); });
+  room.phase = 'development';
+  player.development = { capacity: 1, eligibleColors: ['gray'], chosenColor: 'gray', replaced: 0, done: false, confirmed: false };
+  player.developmentHistory = [];
+  const position = (() => {
+    for (let row = 0; row < 5; row += 1) for (let col = 0; col < 7; col += 1) {
+      if (player.board[row][col]?.type === 'carp' && player.board[row][col].color === 'gray') return { row, col };
+    }
+    return null;
+  })();
+  const previousPiece = { ...player.board[position.row][position.col] };
+  const previousCoins = player.coins;
+  const previousDiscard = { ...player.discard };
+
+  replaceFish(room, player.id, position);
+  assert.equal(room.phase, 'development');
+  assert.equal(player.development.done, true);
+  assert.equal(player.development.confirmed, false);
+  assert.equal(publicRoom(room).players[player.id].developmentHistoryLength, 1);
+
+  undoLastMove(room, player.id);
+  assert.deepEqual(player.board[position.row][position.col], previousPiece);
+  assert.equal(player.coins, previousCoins);
+  assert.deepEqual(player.discard, previousDiscard);
+  assert.equal(player.development.replaced, 0);
+  assert.equal(player.development.done, false);
+  assert.equal(player.development.chosenColor, 'gray');
+  assert.equal(room.lastAction.type, 'undoDevelopment');
 });
