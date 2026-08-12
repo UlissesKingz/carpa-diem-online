@@ -149,6 +149,27 @@
       .replaceAll("'", '&#039;');
   }
 
+  function normalizeEntryName(value) {
+    return String(value || '')
+      .normalize('NFKC')
+      .replace(/[\u0000-\u001F\u007F]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 24);
+  }
+
+  function isValidEntryName(value) {
+    return /^[\p{L}\p{N} ._'’\-]{1,24}$/u.test(value);
+  }
+
+  function normalizeEntryRoomCode(value) {
+    return String(value || '')
+      .normalize('NFKC')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 4);
+  }
+
   function emit(event, payload = {}, options = {}) {
     return new Promise((resolve) => {
       socket.emit(event, payload, (response) => {
@@ -267,12 +288,21 @@
         roundIntroRound = null;
         render();
       }
-    }, 1700);
+    }, 2200);
+  }
+
+  function roundLabel(round = state?.round) {
+    const currentRound = Number(round || 0);
+    const maxRounds = Number(state?.constants?.maxRounds || 0);
+    if (currentRound > 0 && maxRounds > 0 && currentRound === maxRounds) return 'Última Rodada';
+    return currentRound > 0 ? `Rodada ${currentRound}` : 'Rodada —';
   }
 
   function roundIntroHtml() {
     if (!roundIntroRound) return '';
-    return `<div class="round-start-announcement" aria-live="polite"><strong>Início da Rodada ${roundIntroRound}</strong></div>`;
+    const label = roundLabel(roundIntroRound);
+    const text = label === 'Última Rodada' ? label : `Início da ${label}`;
+    return `<div class="round-start-announcement" aria-live="polite"><strong>${text}</strong></div>`;
   }
 
   socket.on('roomState', (room) => {
@@ -679,7 +709,6 @@
     return `
       <header class="topbar">
         <div class="topbar-status">
-          <span class="eyebrow">Sala ${state.code}</span>
           <strong>${state.status === 'lobby' ? (state.mode === 'solo' ? 'Modo solo' : 'Aguardando jogadores') : `${state.mode === 'solo' ? 'Solo · ' : ''}${RULESET_LABELS[state.ruleset || 'classic']} · Rodada ${state.round}/${state.constants.maxRounds}`}</strong>
           <span class="phase-pill">${PHASE_LABELS[state.phase]}</span>
         </div>
@@ -828,9 +857,10 @@
     });
 
     document.querySelector('#createRoom')?.addEventListener('click', async () => {
-      const name = document.querySelector('#playerName').value.trim();
+      const name = normalizeEntryName(document.querySelector('#playerName').value);
       const color = document.querySelector('input[name="color"]:checked')?.value;
       if (!name) { notice = 'Digite seu nome.'; return render(); }
+      if (!isValidEntryName(name)) { notice = 'Use apenas letras, números, espaços, ponto, hífen ou apóstrofo no nome.'; return render(); }
       const mode = entryRole === 'solo' ? 'solo' : 'multiplayer';
       const response = await emit('createRoom', { name, color, mode, rankingPlayerId });
       if (response?.ok) {
@@ -840,9 +870,10 @@
     });
 
     document.querySelector('#joinRoom')?.addEventListener('click', async () => {
-      const name = document.querySelector('#playerName').value.trim();
-      const roomCode = document.querySelector('#roomCode').value.trim().toUpperCase();
+      const name = normalizeEntryName(document.querySelector('#playerName').value);
+      const roomCode = normalizeEntryRoomCode(document.querySelector('#roomCode').value);
       if (!name || roomCode.length !== 4) { notice = 'Informe seu nome e o código da sala.'; return render(); }
+      if (!isValidEntryName(name)) { notice = 'Use apenas letras, números, espaços, ponto, hífen ou apóstrofo no nome.'; return render(); }
       if (entryRole === 'spectator') {
         const response = await emit('joinSpectator', { name, roomCode });
         if (response?.ok) { saveIdentity({ name, color: null, ...response }); render(); }
@@ -1382,12 +1413,17 @@
           <aside class="left-rail">${roundPanelHtml()}${state.mode === 'solo' ? soloScorePanelHtml() : populationScorePanelHtml()}</aside>
           <section class="my-tank-card">
             ${automaLineHtml()}
-            <header>
-              <div class="tank-player-heading"><p class="eyebrow">Seu tanque</p><div class="player-title-line"><h1>${escapeHtml(current.name)}</h1><span class="preferred-carp-label">Sua carpa preferida:<img src="${ASSETS[current.color]}" alt="Carpa ${COLOR_LABELS[current.color]}"></span></div></div>
-              <div class="tank-header-actions">
-                <div class="middle-count">Sua cor na linha <strong>${preferredInMiddle}</strong></div>
-                <button id="undoMove" class="undo-button" ${canUndo ? '' : 'disabled'}>↶ Desfazer jogada</button>
+            <header class="tank-card-header">
+              <p class="eyebrow tank-kicker">Seu tanque</p>
+              <div class="tank-room-code-wrap">
+                <p class="eyebrow tank-room-code">Sala ${escapeHtml(state.code)}</p>
+                <button class="tank-copy-code" type="button" data-code="${escapeHtml(state.code)}">Copiar código da sala</button>
               </div>
+              <p class="eyebrow tank-round-label">${roundLabel()}</p>
+              <h1 class="tank-player-name">${escapeHtml(current.name)}</h1>
+              <span class="preferred-carp-label">Sua carpa preferida:<img src="${ASSETS[current.color]}" alt="Carpa ${COLOR_LABELS[current.color]}"></span>
+              <div class="middle-count">Sua cor na linha <strong>${preferredInMiddle}</strong></div>
+              <button id="undoMove" class="undo-button" ${canUndo ? '' : 'disabled'}>↶ Desfazer jogada</button>
             </header>
             <div class="player-board-wrap">
               ${boardHtml(current, { interactive: state.phase === 'movement' || state.phase === 'development' })}
@@ -1399,6 +1435,21 @@
           <div class="piece-guide-slot">${pieceGuideHtml()}</div>
         </main>
       </div>`;
+
+    document.querySelector('.tank-copy-code')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      const code = String(button.dataset.code || state.code || '');
+      try {
+        await navigator.clipboard.writeText(code);
+        button.textContent = 'Código copiado';
+        window.setTimeout(() => {
+          if (button.isConnected) button.textContent = 'Copiar código da sala';
+        }, 1400);
+      } catch {
+        notice = 'Não foi possível copiar o código da sala.';
+        render();
+      }
+    });
 
     document.querySelectorAll('.my-tank-card .tank-cell').forEach((cell) => {
       cell.addEventListener('click', async () => {

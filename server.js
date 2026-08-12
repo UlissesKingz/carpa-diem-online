@@ -28,15 +28,32 @@ const {
 const PORT = process.env.PORT || 3000;
 const app = express();
 const server = http.createServer(app);
+const allowedOrigins = String(process.env.ALLOWED_ORIGINS || process.env.PUBLIC_ORIGIN || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 const io = new Server(server, {
-  cors: { origin: true, credentials: true },
+  cors: {
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('Origem não autorizada.'), false);
+    },
+    credentials: true
+  },
   // Dá mais tolerância a travamentos momentâneos do navegador/mobile antes de
   // considerar a conexão perdida. O cliente continua reconectando automaticamente.
   pingInterval: 25000,
   pingTimeout: 60000
 });
 
-app.use(express.json());
+app.disable('x-powered-by');
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
+app.use(express.json({ limit: '50kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (_req, res) => res.redirect('/device.html'));
 app.get('/health', (_req, res) => res.json({ ok: true, storage: storage.status() }));
@@ -55,6 +72,78 @@ const rankingJobs = new Set();
 const EMPTY_ROOM_CLOSE_MS = 10 * 60 * 1000;
 let heartbeatTimer = null;
 let shuttingDown = false;
+
+const rateBuckets = new Map();
+const RATE_LIMIT_CLEANUP_MS = 5 * 60 * 1000;
+
+function clientIp(socket) {
+  const forwarded = String(socket.handshake.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return forwarded || socket.handshake.address || 'unknown';
+}
+
+function rateLimit(socket, key, limit, windowMs) {
+  const now = Date.now();
+  const bucketKey = `${clientIp(socket)}:${key}`;
+  const bucket = rateBuckets.get(bucketKey);
+
+  if (!bucket || now > bucket.resetAt) {
+    rateBuckets.set(bucketKey, { count: 1, resetAt: now + windowMs });
+    return;
+  }
+
+  bucket.count += 1;
+  if (bucket.count > limit) throw new Error('Muitas tentativas em pouco tempo. Aguarde alguns instantes e tente novamente.');
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, bucket] of rateBuckets.entries()) {
+    if (now > bucket.resetAt + RATE_LIMIT_CLEANUP_MS) rateBuckets.delete(key);
+  }
+}, RATE_LIMIT_CLEANUP_MS).unref?.();
+
+function sanitizeName(value) {
+  const name = String(value || '')
+    .normalize('NFKC')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 24);
+
+  if (!name) throw new Error('Informe um nome.');
+  if (!/^[\p{L}\p{N} ._'’\-]{1,24}$/u.test(name)) throw new Error('Use apenas letras, números, espaços, ponto, hífen ou apóstrofo no nome.');
+  return name;
+}
+
+function sanitizeRoomCode(value) {
+  const code = String(value || '').normalize('NFKC').trim().toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(code)) throw new Error('Código de sala inválido.');
+  return code;
+}
+
+function sanitizeColor(value) {
+  if (!COLORS.includes(value)) throw new Error('Escolha uma cor válida.');
+  return value;
+}
+
+function sanitizeMode(value) {
+  return value === 'solo' ? 'solo' : 'multiplayer';
+}
+
+function sanitizeRuleset(value) {
+  const ruleset = String(value || 'classic').trim().toLowerCase();
+  if (!['kids', 'classic', 'advanced'].includes(ruleset)) throw new Error('Dificuldade inválida.');
+  return ruleset;
+}
+
+function sanitizeRankingPlayerId(value) {
+  const id = String(value || '').trim();
+  return /^[A-Za-z0-9_-]{12,96}$/.test(id) ? id : null;
+}
+
+function safePayload(payload = {}) {
+  return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+}
 
 function fireAndForget(promise, label) {
   Promise.resolve(promise).catch((error) => console.error(`${label}:`, error.message));
@@ -234,8 +323,7 @@ app.get('/api/admin/matches/:matchId', adminAuth, async (req, res) => {
 });
 
 function normalizeRankingPlayerId(value) {
-  const normalized = String(value || '').trim().slice(0, 96);
-  return /^[A-Za-z0-9_-]{12,96}$/.test(normalized) ? normalized : null;
+  return sanitizeRankingPlayerId(value);
 }
 
 function uniqueRoom(options) {
@@ -394,14 +482,20 @@ function clearSocketRoom(socket) {
 
 io.on('connection', (socket) => {
   socket.on('createRoom', safeHandler(socket, (payload = {}) => {
-    if (!COLORS.includes(payload.color)) throw new Error('Escolha uma cor válida.');
+    rateLimit(socket, 'createRoom', 6, 60 * 1000);
+    payload = safePayload(payload);
+    const hostName = sanitizeName(payload.name);
+    const color = sanitizeColor(payload.color);
+    const mode = sanitizeMode(payload.mode);
+    const rankingPlayerId = sanitizeRankingPlayerId(payload.rankingPlayerId);
+    const ruleset = sanitizeRuleset(payload.ruleset || 'classic');
     const room = uniqueRoom({
-      hostName: payload.name,
-      color: payload.color,
+      hostName,
+      color,
       socketId: socket.id,
-      mode: payload.mode,
-      rankingPlayerId: payload.rankingPlayerId,
-      ruleset: payload.ruleset
+      mode,
+      rankingPlayerId,
+      ruleset
     });
     rooms.set(room.code, room);
     const player = room.players[room.hostId];
@@ -420,7 +514,12 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('joinRoom', safeHandler(socket, (payload = {}) => {
-    const code = String(payload.roomCode || '').trim().toUpperCase();
+    rateLimit(socket, 'joinRoom', 20, 60 * 1000);
+    payload = safePayload(payload);
+    const code = sanitizeRoomCode(payload.roomCode);
+    const name = sanitizeName(payload.name);
+    const color = payload.color ? sanitizeColor(payload.color) : null;
+    const rankingPlayerId = sanitizeRankingPlayerId(payload.rankingPlayerId);
     const room = rooms.get(code);
     if (!room) throw new Error('Sala não encontrada.');
 
@@ -430,7 +529,7 @@ io.on('connection', (socket) => {
     }
 
     if (!player && room.status !== 'lobby') {
-      const normalizedName = String(payload.name || '').trim().toLocaleLowerCase('pt-BR');
+      const normalizedName = name.toLocaleLowerCase('pt-BR');
       player = room.playerOrder
         .map((id) => room.players[id])
         .find((item) => !item.connected && item.name.trim().toLocaleLowerCase('pt-BR') === normalizedName) || null;
@@ -440,11 +539,12 @@ io.on('connection', (socket) => {
     const returningPlayer = Boolean(player);
     if (player) {
       handoffMemberSocket(room, player, socket);
-      if (!player.rankingPlayerId) player.rankingPlayerId = normalizeRankingPlayerId(payload.rankingPlayerId);
+      if (!player.rankingPlayerId) player.rankingPlayerId = normalizeRankingPlayerId(rankingPlayerId);
       resumeCirculation(room);
       room.logs.push({ at: Date.now(), text: 'voltou à partida.', actorId: player.id, actorRole: 'player' });
     } else {
-      player = addPlayer(room, { name: payload.name, color: payload.color, socketId: socket.id, rankingPlayerId: payload.rankingPlayerId });
+      if (!color) throw new Error('Escolha uma cor válida.');
+      player = addPlayer(room, { name, color, socketId: socket.id, rankingPlayerId });
     }
 
     attachSocketToRoom(socket, room, player, 'player');
@@ -467,7 +567,10 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('joinSpectator', safeHandler(socket, (payload = {}) => {
-    const code = String(payload.roomCode || '').trim().toUpperCase();
+    rateLimit(socket, 'joinSpectator', 30, 60 * 1000);
+    payload = safePayload(payload);
+    const code = sanitizeRoomCode(payload.roomCode);
+    const name = sanitizeName(payload.name);
     const room = rooms.get(code);
     if (!room) throw new Error('Sala não encontrada.');
 
@@ -481,7 +584,7 @@ io.on('connection', (socket) => {
       handoffMemberSocket(room, spectator, socket);
       room.logs.push({ at: Date.now(), text: 'se reconectou como espectador.', actorId: spectator.id, actorRole: 'spectator' });
     } else {
-      spectator = addSpectator(room, { name: payload.name, socketId: socket.id });
+      spectator = addSpectator(room, { name, socketId: socket.id });
     }
 
     attachSocketToRoom(socket, room, spectator, 'spectator');
@@ -530,19 +633,23 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('setGameRuleset', safeHandler(socket, (payload = {}) => {
+    rateLimit(socket, 'gameAction', 80, 10 * 1000);
+    payload = safePayload(payload);
     const room = roomForSocket(socket);
     if (socket.data.memberRole !== 'player') throw new Error('Espectadores não podem alterar o modo de regras.');
-    setGameRuleset(room, socket.data.memberId, payload.ruleset);
+    setGameRuleset(room, socket.data.memberId, sanitizeRuleset(payload.ruleset));
     emitRoom(room);
     return { ruleset: room.ruleset };
   }));
 
   socket.on('startGame', safeHandler(socket, (payload = {}) => {
+    rateLimit(socket, 'gameAction', 80, 10 * 1000);
+    payload = safePayload(payload);
     const room = roomForSocket(socket);
     if (socket.data.memberRole !== 'player') throw new Error('Espectadores não podem iniciar a partida.');
 
     // Compatibilidade com salas solo criadas antes de o modo ser corretamente persistido.
-    if (payload.mode === 'solo' && room.status === 'lobby' && room.playerOrder.length === 1) {
+    if (sanitizeMode(payload.mode) === 'solo' && room.status === 'lobby' && room.playerOrder.length === 1) {
       room.mode = 'solo';
     }
 
@@ -552,6 +659,7 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('requestRestart', safeHandler(socket, () => {
+    rateLimit(socket, 'restart', 8, 60 * 1000);
     const room = roomForSocket(socket);
     if (socket.data.memberRole !== 'player') throw new Error('Espectadores não participam da decisão.');
     const result = requestRestart(room, socket.data.memberId) || {};
@@ -561,6 +669,8 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('respondRestart', safeHandler(socket, (payload = {}) => {
+    rateLimit(socket, 'restart', 20, 60 * 1000);
+    payload = safePayload(payload);
     const room = roomForSocket(socket);
     if (socket.data.memberRole !== 'player') throw new Error('Espectadores não participam da decisão.');
     const result = respondRestart(room, socket.data.memberId, Boolean(payload.accept));
@@ -570,6 +680,8 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('movePiece', safeHandler(socket, (payload = {}) => {
+    rateLimit(socket, 'movePiece', 120, 10 * 1000);
+    payload = safePayload(payload);
     const room = roomForSocket(socket);
     if (socket.data.memberRole !== 'player') throw new Error('Espectadores não podem mover peças.');
     const result = movePiece(room, socket.data.memberId, payload.from || {});
@@ -578,6 +690,7 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('undoMove', safeHandler(socket, () => {
+    rateLimit(socket, 'gameAction', 80, 10 * 1000);
     const room = roomForSocket(socket);
     if (socket.data.memberRole !== 'player') throw new Error('Espectadores não podem desfazer jogadas.');
     const result = undoLastMove(room, socket.data.memberId);
@@ -586,6 +699,7 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('buyExtraMove', safeHandler(socket, () => {
+    rateLimit(socket, 'gameAction', 80, 10 * 1000);
     const room = roomForSocket(socket);
     if (socket.data.memberRole !== 'player') throw new Error('Espectadores não podem comprar movimentos.');
     const result = buyExtraMove(room, socket.data.memberId);
@@ -594,6 +708,7 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('finishMovement', safeHandler(socket, () => {
+    rateLimit(socket, 'gameAction', 80, 10 * 1000);
     const room = roomForSocket(socket);
     if (socket.data.memberRole !== 'player') throw new Error('Espectadores não podem concluir a fase.');
     markMovementReady(room, socket.data.memberId);
@@ -602,6 +717,8 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('chooseDevelopmentColor', safeHandler(socket, (payload = {}) => {
+    rateLimit(socket, 'gameAction', 80, 10 * 1000);
+    payload = safePayload(payload);
     const room = roomForSocket(socket);
     if (socket.data.memberRole !== 'player') throw new Error('Espectadores não podem escolher reposições.');
     chooseDevelopmentColor(room, socket.data.memberId, payload.color);
@@ -610,6 +727,8 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('replaceFish', safeHandler(socket, (payload = {}) => {
+    rateLimit(socket, 'gameAction', 80, 10 * 1000);
+    payload = safePayload(payload);
     const room = roomForSocket(socket);
     if (socket.data.memberRole !== 'player') throw new Error('Espectadores não podem trocar peças.');
     replaceFish(room, socket.data.memberId, payload.position || {});
@@ -618,6 +737,7 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('finishDevelopment', safeHandler(socket, () => {
+    rateLimit(socket, 'gameAction', 80, 10 * 1000);
     const room = roomForSocket(socket);
     if (socket.data.memberRole !== 'player') throw new Error('Espectadores não podem concluir a reposição.');
     const result = markDevelopmentReady(room, socket.data.memberId);

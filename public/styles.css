@@ -824,6 +824,64 @@ body[data-layout="mobile"] .tank-cell { border-radius: 4px; }
 body[data-layout="mobile"] .channel-marker { font-size: 1rem; }
 body[data-layout="mobile"] .piece-shell { width: 96.6%; height: 96.6%; }
 body[data-layout="mobile"] .middle-count { font-size: .7rem; }
+
+/* Cabeçalho vertical do tanque mais limpo no mobile. */
+body[data-layout="mobile"] .my-tank-card > header.tank-card-header {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "kicker round"
+    "name name"
+    "preferred middle"
+    "undo undo";
+  gap: 7px 8px;
+  align-items: stretch;
+}
+body[data-layout="mobile"] .tank-card-header .tank-kicker,
+body[data-layout="mobile"] .tank-card-header .tank-round-label {
+  align-self: center;
+  margin: 0;
+  font-size: .62rem;
+}
+body[data-layout="mobile"] .tank-room-code { font-size: .6rem; }
+body[data-layout="mobile"] .tank-copy-code {
+  padding: 2px 6px;
+  font-size: .48rem;
+}
+body[data-layout="mobile"] .tank-card-header .tank-player-name {
+  align-self: center;
+  font-size: clamp(1.28rem, 5.6vw, 1.75rem);
+  line-height: 1.05;
+}
+body[data-layout="mobile"] .tank-card-header > .preferred-carp-label,
+body[data-layout="mobile"] .tank-card-header > .middle-count {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  box-sizing: border-box;
+}
+body[data-layout="mobile"] .tank-card-header > .preferred-carp-label {
+  justify-content: space-between;
+  gap: 5px;
+  padding: 5px 8px;
+  font-size: .64rem;
+  white-space: normal;
+}
+body[data-layout="mobile"] .tank-card-header > .preferred-carp-label img {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 31px;
+}
+body[data-layout="mobile"] .tank-card-header > .middle-count {
+  justify-content: space-between;
+  gap: 5px;
+  padding: 6px 8px;
+  font-size: .64rem;
+}
+body[data-layout="mobile"] .tank-card-header > .middle-count strong { font-size: 1.15rem; }
+body[data-layout="mobile"] .tank-card-header > .undo-button {
+  width: 100%;
+  min-height: 38px;
+}
 body[data-layout="mobile"] .movement-score strong { font-size: 3.6rem; }
 
 @media (max-width: 1180px) {
@@ -952,6 +1010,86 @@ body[data-layout="mobile"] .movement-score strong { font-size: 3.6rem; }
 .fish-gray { color: #879298; background: #879298; }
 
 .tank-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; flex-wrap: wrap; }
+
+/* Cabeçalho do tanque: rodada no lado oposto de "Seu tanque". */
+.my-tank-card > header.tank-card-header {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) auto auto auto;
+  grid-template-areas:
+    "kicker . . round"
+    "name preferred middle undo";
+  align-items: center;
+  gap: 7px 10px;
+}
+.tank-kicker { grid-area: kicker; margin: 0; }
+.tank-room-code-wrap {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: center;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  z-index: 1;
+  pointer-events: none;
+}
+.tank-room-code {
+  margin: 0;
+  color: var(--teal);
+  text-align: center;
+  white-space: nowrap;
+}
+.tank-copy-code {
+  min-height: 0;
+  padding: 2px 7px;
+  border: 1px solid rgba(102, 214, 202, .2);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(102, 214, 202, .045);
+  font: inherit;
+  font-size: .52rem;
+  font-weight: 800;
+  line-height: 1.15;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: border-color .18s ease, color .18s ease, background .18s ease;
+}
+.tank-copy-code:hover {
+  color: var(--text);
+  border-color: rgba(102, 214, 202, .42);
+  background: rgba(102, 214, 202, .09);
+}
+.tank-round-label {
+  grid-area: round;
+  justify-self: end;
+  margin: 0;
+  color: var(--teal);
+  text-align: right;
+  white-space: nowrap;
+}
+.tank-player-name {
+  grid-area: name;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tank-card-header > .preferred-carp-label { grid-area: preferred; }
+.tank-card-header > .middle-count { grid-area: middle; }
+.tank-card-header > .undo-button { grid-area: undo; }
+
+@media (max-width: 1180px) {
+  .my-tank-card > header.tank-card-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "kicker round"
+      "name name"
+      "preferred middle"
+      "undo undo";
+  }
+  .tank-card-header > .undo-button { width: 100%; }
+}
 .undo-button {
   min-height: 38px;
   border: 1px solid rgba(249, 224, 193, .18);
@@ -2544,7 +2682,7 @@ body[data-layout="mobile"] .animate-line-in {
   box-sizing: border-box;
   pointer-events: none;
   background: rgba(4, 10, 15, .18);
-  animation: roundStartBackdrop 1.7s ease forwards;
+  animation: roundStartBackdrop 2.2s ease forwards;
 }
 
 /* No jogo do participante, o aviso fica centralizado sobre o próprio tabuleiro. */
@@ -2574,7 +2712,7 @@ body[data-layout="mobile"] .animate-line-in {
   letter-spacing: -.035em;
   text-align: center;
   text-shadow: 0 8px 32px rgba(0, 0, 0, .6);
-  animation: roundStartTitle 1.7s cubic-bezier(.2, .75, .22, 1) forwards;
+  animation: roundStartTitle 2.2s cubic-bezier(.2, .75, .22, 1) forwards;
 }
 
 @keyframes roundStartBackdrop {
