@@ -45,16 +45,18 @@ function isBetterRankingResult(candidate, current) {
 
 function rankingResultEntries(room) {
   const ranking = room?.winner?.ranking || [];
-  return ranking.map((entry) => {
-    const player = room.players?.[entry.playerId];
-    return {
-      roomPlayerId: entry.playerId,
-      rankingPlayerId: player?.rankingPlayerId || `legacy-${room.matchId || room.code}-${entry.playerId}`,
-      nickname: String(player?.name || 'Jogador').trim().slice(0, 24) || 'Jogador',
-      score: Number(entry.score || 0),
-      coins: Number(entry.coins || 0)
-    };
-  });
+  return ranking
+    .filter((entry) => !room.players?.[entry.playerId]?.isBot)
+    .map((entry) => {
+      const player = room.players?.[entry.playerId];
+      return {
+        roomPlayerId: entry.playerId,
+        rankingPlayerId: player?.rankingPlayerId || `legacy-${room.matchId || room.code}-${entry.playerId}`,
+        nickname: String(player?.name || 'Jogador').trim().slice(0, 24) || 'Jogador',
+        score: Number(entry.score || 0),
+        coins: Number(entry.coins || 0)
+      };
+    });
 }
 
 function publicRankingRecord(record) {
@@ -122,8 +124,9 @@ function connectedMembers(room) {
     .map((member) => ({
       memberId: member.id,
       name: member.name,
-      role: 'player',
+      role: member.isBot ? 'bot' : 'player',
       color: member.color || null,
+      isBot: Boolean(member.isBot),
       connected: Boolean(member.connected)
     }));
   const spectators = Object.values(room.spectators || {}).map((member) => ({
@@ -137,7 +140,7 @@ function connectedMembers(room) {
 }
 
 function connectedCount(room) {
-  return connectedMembers(room).filter((member) => member.connected).length;
+  return connectedMembers(room).filter((member) => !member.isBot && member.connected).length;
 }
 
 function eventId() {
@@ -211,6 +214,7 @@ function buildMatchRecord(room) {
       rankingPlayerId: player?.rankingPlayerId || null,
       name: player?.name || 'Jogador',
       color: player?.color || entry.color,
+      isBot: Boolean(player?.isBot),
       score: entry.score,
       coins: entry.coins,
       placement: index + 1
@@ -552,6 +556,7 @@ async function historicalRankingLeader(ruleset, mode) {
   const [record] = await database.collection('match_records').aggregate([
     { $match: matchFilter },
     { $unwind: '$players' },
+    { $match: { 'players.isBot': { $ne: true } } },
     { $sort: { 'players.score': -1, 'players.coins': -1, finishedAt: 1, _id: 1 } },
     { $limit: 1 },
     { $project: { _id: 0, nickname: '$players.name', score: '$players.score', coins: '$players.coins' } }

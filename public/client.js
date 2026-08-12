@@ -383,6 +383,10 @@
     return `<span class="player-name-chip chip-${player.color}">${escapeHtml(player.name)}</span>`;
   }
 
+  function botBadgeHtml(player, compact = false) {
+    return player?.isBot ? `<span class="bot-badge ${compact ? 'compact' : ''}">BOT</span>` : '';
+  }
+
   function pieceAnimation(playerId, row, col, piece) {
     const emptyAnimation = { shellClass: '', shellStyle: '', orientationClass: '', orientationStyle: '' };
     if (!animateCurrentAction || !state?.lastAction || !piece) return emptyAnimation;
@@ -910,9 +914,10 @@
           </section>
           ${notice ? `<div class="notice error">${escapeHtml(notice)}</div>` : ''}
           <div class="player-list">
-            ${players.map((player) => `<article class="player-row"><span class="connection ${player.connected ? 'online' : ''}"></span>${playerNameChip(player)}${colorBadge(player.color)}${player.id === state.hostId ? '<em>Anfitrião</em>' : ''}</article>`).join('')}
+            ${players.map((player) => `<article class="player-row ${player.isBot ? 'bot-player-row' : ''}">${player.isBot ? '<span class="bot-status-dot" aria-hidden="true">◆</span>' : `<span class="connection ${player.connected ? 'online' : ''}"></span>`}${playerNameChip(player)}${colorBadge(player.color)}${botBadgeHtml(player)}${player.id === state.hostId ? '<em>Anfitrião</em>' : ''}${current?.id === state.hostId && player.isBot ? `<button class="remove-bot-button" type="button" data-bot-id="${player.id}" title="Remover ${escapeHtml(player.name)}">Remover</button>` : ''}</article>`).join('')}
           </div>
           <p class="muted">${state.mode === 'solo' ? 'Modo solo · você pode iniciar imediatamente. Espectadores são opcionais e podem entrar usando este código.' : `${players.length}/4 jogadores · Cores livres: ${available.map((color) => COLOR_LABELS[color]).join(', ') || 'nenhuma'}`}</p>
+          ${state.mode !== 'solo' && current?.id === state.hostId ? `<section class="lobby-bot-controls"><div><strong>Bots</strong><span>Preencha as vagas restantes com adversários automáticos.</span></div><button id="addBot" class="secondary-button" type="button" ${players.length >= 4 ? 'disabled' : ''}>+ Adicionar bot</button></section>` : ''}
           <section class="spectator-list"><h2>Espectadores <span>${spectators.length}</span></h2>${spectators.length ? spectators.map((spectator) => `<p><span class="connection ${spectator.connected ? 'online' : ''}"></span>${escapeHtml(spectator.name)}</p>`).join('') : '<p class="muted">Nenhum espectador conectado.</p>'}</section>
           ${current?.id === state.hostId ? `<button id="startGame" class="primary-button" ${(state.mode === 'solo' || identity.roomMode === 'solo' || entryRole === 'solo') ? '' : (players.length < 2 ? 'disabled' : '')}>Iniciar partida</button>` : identity.role === 'spectator' ? '<p class="waiting">Você está assistindo à sala de espera.</p>' : '<p class="waiting">Aguardando o anfitrião iniciar...</p>'}
           </section>
@@ -941,6 +946,10 @@
     document.querySelectorAll('.ruleset-button').forEach((button) => button.addEventListener('click', () => {
       if (button.disabled) return;
       emit('setGameRuleset', { ruleset: button.dataset.ruleset });
+    }));
+    document.querySelector('#addBot')?.addEventListener('click', () => emit('addBot'));
+    document.querySelectorAll('.remove-bot-button').forEach((button) => button.addEventListener('click', () => {
+      emit('removeBot', { botId: button.dataset.botId });
     }));
     document.querySelector('#startGame')?.addEventListener('click', () => {
       const mode = state.mode === 'solo' || identity.roomMode === 'solo' || entryRole === 'solo' ? 'solo' : 'multiplayer';
@@ -1029,7 +1038,7 @@
       .map((id) => {
         const player = state.players[id];
         const status = playerPhaseStatus(player);
-        return `<article class="opponent-card"><header>${playerNameChip(player)}${colorBadge(player.color)}</header>${opponentFlowBadgesHtml(id)}${boardHtml(player, { miniature: true })}<footer class="${status.waiting ? 'phase-waiting-footer' : ''}"><span class="opponent-status-text"><span class="connection ${player.connected ? 'online' : ''}"></span>${status.text}</span>${opponentMovementCounterHtml(player)}</footer></article>`;
+        return `<article class="opponent-card ${player.isBot ? 'bot-opponent-card' : ''}"><header>${playerNameChip(player)}${colorBadge(player.color)}${botBadgeHtml(player, true)}</header>${opponentFlowBadgesHtml(id)}${boardHtml(player, { miniature: true })}<footer class="${status.waiting ? 'phase-waiting-footer' : ''}"><span class="opponent-status-text">${player.isBot ? '<span class="bot-status-dot small" aria-hidden="true">◆</span>' : `<span class="connection ${player.connected ? 'online' : ''}"></span>`}${player.isBot ? 'Bot automático' : status.text}</span>${player.isBot ? '' : opponentMovementCounterHtml(player)}</footer></article>`;
       }).join('');
   }
 
@@ -1243,7 +1252,7 @@
     const restartButton = identity.role === 'player' ? '<button id="finalRestartGame" class="primary-button">↻ Reiniciar partida</button>' : '';
     const rankingLabel = `Ranking Geral — ${rankingModeLabel()}`;
 
-    return `<div class="modal-backdrop final-results-backdrop"><section class="result-card final-results-card">${logoHtml('result-logo')}<p class="eyebrow">Resultado final</p><h1>${title}</h1><p class="result-rule">Primeiro conta-se o total de carpas. Em empate, vence quem tiver mais moedas.</p><div class="ranking ranking-with-general"><div class="ranking-table-header"><span>Partida</span><span>Jogador</span><span></span><span>Pontuação</span><span>Moedas</span><span>${escapeHtml(rankingLabel)}</span></div>${ranking.map(({ player, score, coins }, index) => `<div class="${index === 0 ? 'winner-row' : ''}"><strong>${index + 1}º</strong>${playerNameChip(player)}${colorBadge(player.color)}<span>${score} carpas</span><span class="ranking-coins"><img src="${ASSETS.coin}" alt="">${coins}</span><span class="general-rank-position">${rankingPositionText(player.id)}</span></div>`).join('')}</div>${generalRankingLeaderHtml()}<div class="final-result-actions">${restartButton}<button id="finalExitGame" class="secondary-button">Sair</button></div></section></div>`;
+    return `<div class="modal-backdrop final-results-backdrop"><section class="result-card final-results-card">${logoHtml('result-logo')}<p class="eyebrow">Resultado final</p><h1>${title}</h1><p class="result-rule">Primeiro conta-se o total de carpas. Em empate, vence quem tiver mais moedas.</p><div class="ranking ranking-with-general"><div class="ranking-table-header"><span>Partida</span><span>Jogador</span><span></span><span>Pontuação</span><span>Moedas</span><span>${escapeHtml(rankingLabel)}</span></div>${ranking.map(({ player, score, coins }, index) => `<div class="${index === 0 ? 'winner-row' : ''}"><strong>${index + 1}º</strong>${playerNameChip(player)}${colorBadge(player.color)}<span>${score} carpas</span><span class="ranking-coins"><img src="${ASSETS.coin}" alt="">${coins}</span><span class="general-rank-position">${player.isBot ? '—' : rankingPositionText(player.id)}</span></div>`).join('')}</div>${generalRankingLeaderHtml()}<div class="final-result-actions">${restartButton}<button id="finalExitGame" class="secondary-button">Sair</button></div></section></div>`;
   }
 
   function logPanelHtml() {
@@ -1481,7 +1490,7 @@
     const boards = state.playerOrder.map((id) => {
       const player = state.players[id];
       const status = playerPhaseStatus(player, { spectatorView: true });
-      return `<article class="spectator-board-card"><header>${playerNameChip(player)}${colorBadge(player.color)}<span class="connection ${player.connected ? 'online' : ''}"></span></header>${state.mode === 'solo' ? automaLineHtml() : ''}${boardHtml(player, { spectator: true })}<footer class="spectator-phase-status ${status.waiting ? 'phase-waiting-footer' : ''}">${status.text}</footer></article>`;
+      return `<article class="spectator-board-card"><header>${playerNameChip(player)}${colorBadge(player.color)}${botBadgeHtml(player, true)}${player.isBot ? '' : `<span class="connection ${player.connected ? 'online' : ''}"></span>`}</header>${state.mode === 'solo' ? automaLineHtml() : ''}${boardHtml(player, { spectator: true })}<footer class="spectator-phase-status ${status.waiting ? 'phase-waiting-footer' : ''}">${player.isBot ? 'Bot automático' : status.text}</footer></article>`;
     }).join('');
 
     app.innerHTML = `

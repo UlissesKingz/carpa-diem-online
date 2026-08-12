@@ -7,6 +7,8 @@ const {
   COLORS,
   createRoom,
   addPlayer,
+  addBot,
+  removeBot,
   addSpectator,
   removeMember,
   setGameRuleset,
@@ -243,6 +245,7 @@ function roomSummary(room) {
         name: player.name,
         color: player.color,
         connected: player.connected,
+        isBot: Boolean(player.isBot),
         coins: player.coins || 0,
         movesRemaining: player.movesRemaining,
         movementReady: player.movementReady
@@ -640,6 +643,27 @@ io.on('connection', (socket) => {
     setGameRuleset(room, socket.data.memberId, sanitizeRuleset(payload.ruleset));
     emitRoom(room);
     return { ruleset: room.ruleset };
+  }));
+
+  socket.on('addBot', safeHandler(socket, () => {
+    rateLimit(socket, 'lobbyBot', 20, 60 * 1000);
+    const room = roomForSocket(socket);
+    if (socket.data.memberRole !== 'player') throw new Error('Espectadores não podem adicionar bots.');
+    const bot = addBot(room, socket.data.memberId);
+    emitRoom(room);
+    return { botId: bot.id, color: bot.color };
+  }));
+
+  socket.on('removeBot', safeHandler(socket, (payload = {}) => {
+    rateLimit(socket, 'lobbyBot', 20, 60 * 1000);
+    payload = safePayload(payload);
+    const room = roomForSocket(socket);
+    if (socket.data.memberRole !== 'player') throw new Error('Espectadores não podem remover bots.');
+    const botId = String(payload.botId || '').trim();
+    if (!/^[a-f0-9]{12}$/i.test(botId)) throw new Error('Bot inválido.');
+    removeBot(room, socket.data.memberId, botId);
+    emitRoom(room);
+    return {};
   }));
 
   socket.on('startGame', safeHandler(socket, (payload = {}) => {

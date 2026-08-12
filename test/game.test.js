@@ -4,6 +4,8 @@ const {
   createRoom,
   SPECIAL_TYPES,
   addPlayer,
+  addBot,
+  removeBot,
   addSpectator,
   startGame,
   requestRestart,
@@ -442,4 +444,90 @@ test('última reposição pode ser desfeita antes da confirmação da fase', () 
   assert.equal(player.development.done, false);
   assert.equal(player.development.chosenColor, 'gray');
   assert.equal(room.lastAction.type, 'undoDevelopment');
+});
+
+
+test('cor ocupada informa também quais cores continuam disponíveis', () => {
+  const room = createRoom({ hostName: 'Ana', color: 'yellow', socketId: 'a' });
+  addPlayer(room, { name: 'Beto', color: 'red', socketId: 'b' });
+  assert.throws(
+    () => addPlayer(room, { name: 'Caio', color: 'yellow', socketId: 'c' }),
+    (error) => /Amarela já foi selecionada/.test(error.message)
+      && /Branca/.test(error.message)
+      && /Cinza/.test(error.message)
+  );
+});
+
+test('anfitrião pode adicionar e remover bots no lobby', () => {
+  const room = createRoom({ hostName: 'Ana', color: 'yellow', socketId: 'a' });
+  const bot = addBot(room, room.hostId);
+  assert.equal(bot.isBot, true);
+  assert.equal(bot.connected, true);
+  assert.notEqual(bot.color, 'yellow');
+  assert.equal(room.playerOrder.length, 2);
+  assert.equal(publicRoom(room).players[bot.id].isBot, true);
+  removeBot(room, room.hostId, bot.id);
+  assert.equal(room.players[bot.id], undefined);
+  assert.equal(room.playerOrder.length, 1);
+});
+
+test('bot começa com linha central completa e vazio no centro da linha 4', () => {
+  const room = createRoom({ hostName: 'Ana', color: 'yellow', socketId: 'a' });
+  const bot = addBot(room, room.hostId);
+  startGame(room, room.hostId);
+  assert.equal(bot.movementReady, true);
+  assert.equal(bot.movesRemaining, 0);
+  assert.notEqual(bot.board[2][3], null);
+  assert.equal(bot.board[3][3], null);
+});
+
+function advanceTestRound(room, humanId) {
+  const human = room.players[humanId];
+  if (human.board[2].some((piece) => piece === null)) {
+    const col = human.board[2].findIndex((piece) => piece === null);
+    human.board[2][col] = human.board[3][col];
+    human.board[3][col] = null;
+  }
+  human.movesRemaining = 0;
+  human.mustMoveCarp = false;
+  human.correctionRequired = false;
+  if (!human.movementReady) markMovementReady(room, humanId);
+  assert.equal(room.phase, 'circulation');
+  completeCirculation(room);
+  completeCirculation(room);
+  if (room.phase === 'development') {
+    const development = room.players[humanId].development;
+    if (!development.confirmed) {
+      development.done = true;
+      development.confirmed = false;
+      development.chosenColor = null;
+      development.eligibleColors = [];
+      markDevelopmentReady(room, humanId);
+    }
+  }
+}
+
+test('bot gira as cinco linhas a cada nova rodada sem ativar especiais e corrige o vazio na rodada 5', () => {
+  const room = createRoom({ hostName: 'Ana', color: 'yellow', socketId: 'a' });
+  const bot = addBot(room, room.hostId);
+  startGame(room, room.hostId);
+
+  advanceTestRound(room, room.hostId);
+  assert.equal(room.round, 2);
+  assert.equal(bot.movementReady, true);
+  assert.equal(bot.specialAlert, '');
+  assert.equal(bot.board[4][3], null, 'na rodada 2 o vazio deve ter descido para a linha 5');
+
+  advanceTestRound(room, room.hostId);
+  assert.equal(room.round, 3);
+  assert.equal(bot.board[0][3], null, 'na rodada 3 o vazio deve reaparecer na linha 1');
+
+  advanceTestRound(room, room.hostId);
+  assert.equal(room.round, 4);
+  assert.equal(bot.board[1][3], null, 'na rodada 4 o vazio deve estar na linha 2');
+
+  advanceTestRound(room, room.hostId);
+  assert.equal(room.round, 5);
+  assert.notEqual(bot.board[2][3], null, 'na última rodada a linha central deve ser preenchida');
+  assert.equal(bot.board[3][3], null, 'a peça da linha 4 sobe e o vazio fica na linha 4');
 });

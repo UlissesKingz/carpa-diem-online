@@ -2838,3 +2838,109 @@ body[data-layout="mobile"] .opponent-flow-badge { font-size: .58rem; padding: 3p
   78% { opacity: 1; transform: scale(1.12); }
   100% { opacity: 1; transform: scale(1); }
 }
+
+/* Mobile vertical: carpa preferida, contagem da linha e desfazer na mesma linha. */
+@media (max-width: 720px) and (orientation: portrait) {
+  body[data-layout="mobile"] .my-tank-card > header.tank-card-header {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, .9fr) minmax(0, 1.05fr);
+    grid-template-areas:
+      "kicker kicker round"
+      "name name name"
+      "preferred middle undo";
+    gap: 7px 6px;
+  }
+
+  body[data-layout="mobile"] .tank-card-header > .preferred-carp-label,
+  body[data-layout="mobile"] .tank-card-header > .middle-count,
+  body[data-layout="mobile"] .tank-card-header > .undo-button {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    height: 38px;
+  }
+
+  body[data-layout="mobile"] .tank-card-header > .preferred-carp-label {
+    padding: 4px 6px;
+    gap: 4px;
+    font-size: .56rem;
+    white-space: nowrap;
+  }
+
+  body[data-layout="mobile"] .tank-card-header > .preferred-carp-label img {
+    width: 18px;
+    height: 26px;
+  }
+
+  body[data-layout="mobile"] .tank-card-header > .middle-count {
+    padding: 4px 6px;
+    gap: 3px;
+    font-size: .56rem;
+    line-height: 1.08;
+  }
+
+  body[data-layout="mobile"] .tank-card-header > .middle-count strong {
+    font-size: 1.02rem;
+  }
+
+  body[data-layout="mobile"] .tank-card-header > .undo-button {
+    padding: 0 6px;
+    font-size: .68rem;
+    line-height: 1.05;
+    white-space: nowrap;
+  }
+}
+
+/* Bots no lobby e identificação durante a partida */
+.bot-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid rgba(102, 214, 202, .28);
+  border-radius: 999px;
+  color: var(--teal);
+  background: rgba(102, 214, 202, .08);
+  font-size: .62rem;
+  font-weight: 950;
+  letter-spacing: .08em;
+}
+.bot-badge.compact { min-height: 20px; padding: 2px 6px; font-size: .56rem; }
+.bot-status-dot { color: var(--teal); font-size: .72rem; line-height: 1; }
+.bot-status-dot.small { font-size: .58rem; }
+.bot-player-row { border-color: rgba(102, 214, 202, .18); }
+.remove-bot-button {
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, .025);
+  font-size: .68rem;
+  font-weight: 850;
+}
+.remove-bot-button:hover { color: var(--text); background: rgba(255, 255, 255, .06); }
+.lobby-bot-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 14px 0 20px;
+  padding: 13px 14px;
+  border: 1px solid rgba(102, 214, 202, .16);
+  border-radius: 14px;
+  background: rgba(102, 214, 202, .035);
+}
+.lobby-bot-controls > div { display: grid; gap: 3px; }
+.lobby-bot-controls strong { font-size: .86rem; }
+.lobby-bot-controls span { color: var(--muted); font-size: .72rem; line-height: 1.35; }
+.lobby-bot-controls .secondary-button { min-height: 36px; white-space: nowrap; }
+.bot-opponent-card { border-color: rgba(102, 214, 202, .16); }
+
+@media (max-width: 650px) {
+  .player-row { gap: 7px; padding: 10px; }
+  .player-row .color-badge { padding-inline: 8px; }
+  .remove-bot-button { padding-inline: 7px; }
+  .lobby-bot-controls { align-items: stretch; flex-direction: column; }
+  .lobby-bot-controls .secondary-button { width: 100%; }
+}

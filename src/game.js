@@ -800,14 +800,14 @@ function eligibleLeastColors(board, preferredColor) {
 }
 
 function allPlayersConnected(room) {
-  return room.playerOrder.every((id) => room.players[id]?.connected);
+  return room.playerOrder.every((id) => room.players[id]?.isBot || room.players[id]?.connected);
 }
 
 function assertPlayersPresent(room) {
   if (!allPlayersConnected(room)) {
     const absent = room.playerOrder
       .map((id) => room.players[id])
-      .filter((player) => player && !player.connected)
+      .filter((player) => player && !player.isBot && !player.connected)
       .map((player) => player.name)
       .join(', ');
     throw new Error(`A partida está pausada. Aguardando o retorno de ${absent || 'um jogador'}.`);
@@ -867,7 +867,7 @@ function normalizeRankingPlayerId(value) {
   return /^[A-Za-z0-9_-]{12,96}$/.test(normalized) ? normalized : null;
 }
 
-function createPlayer({ name, color, socketId, rankingPlayerId }) {
+function createPlayer({ name, color, socketId, rankingPlayerId, isBot = false }) {
   return {
     id: randomId(6),
     token: randomId(16),
@@ -875,7 +875,8 @@ function createPlayer({ name, color, socketId, rankingPlayerId }) {
     color,
     socketId,
     connected: true,
-    rankingPlayerId: normalizeRankingPlayerId(rankingPlayerId),
+    isBot: Boolean(isBot),
+    rankingPlayerId: isBot ? null : normalizeRankingPlayerId(rankingPlayerId),
     board: null,
     movesRemaining: MOVES_PER_ROUND,
     mustMoveCarp: false,
@@ -892,6 +893,16 @@ function createPlayer({ name, color, socketId, rankingPlayerId }) {
     advancedTrapArmed: [],
     discard: Object.fromEntries(COLORS.map((item) => [item, 0]))
   };
+}
+
+function createBot({ name, color }) {
+  return createPlayer({
+    name,
+    color,
+    socketId: null,
+    rankingPlayerId: null,
+    isBot: true
+  });
 }
 
 function createSpectator({ name, socketId }) {
@@ -1005,12 +1016,57 @@ function addPlayer(room, { name, color, socketId, rankingPlayerId }) {
   if (nameTaken) throw new Error('Esse nome já está em uso nesta sala.');
   if (!COLORS.includes(color)) throw new Error('Cor inválida.');
   const colorTaken = room.playerOrder.some((id) => room.players[id].color === color);
-  if (colorTaken) throw new Error('Essa cor já foi escolhida.');
+  if (colorTaken) {
+    const availableColors = COLORS.filter((candidate) => !room.playerOrder.some((id) => room.players[id].color === candidate));
+    const labels = availableColors.map((candidate) => ({ yellow: 'Amarela', white: 'Branca', red: 'Vermelha', gray: 'Cinza' })[candidate]);
+    const availableText = labels.length > 1
+      ? `${labels.slice(0, -1).join(', ')} e ${labels.at(-1)}`
+      : (labels[0] || 'nenhuma');
+    throw new Error(`A cor ${({ yellow: 'Amarela', white: 'Branca', red: 'Vermelha', gray: 'Cinza' })[color]} já foi selecionada. Cores disponíveis: ${availableText}.`);
+  }
   const player = createPlayer({ name, color, socketId, rankingPlayerId });
   room.players[player.id] = player;
   room.playerOrder.push(player.id);
   addLog(room, 'entrou na sala.', player.id);
   return player;
+}
+
+function addBot(room, requesterId) {
+  if (room.hostId !== requesterId) throw new Error('Somente o anfitrião pode adicionar bots.');
+  if (room.mode === 'solo') throw new Error('Bots estão disponíveis apenas no modo de 2 a 4 jogadores.');
+  if (room.status !== 'lobby') throw new Error('Bots só podem ser adicionados antes da partida.');
+  if (room.playerOrder.length >= 4) throw new Error('A sala já está cheia.');
+
+  const availableColors = COLORS.filter((color) => !room.playerOrder.some((id) => room.players[id]?.color === color));
+  const color = chooseRandom(availableColors);
+  if (!color) throw new Error('Não há cor disponível para outro bot.');
+
+  const usedNumbers = new Set(room.playerOrder
+    .map((id) => room.players[id])
+    .filter((player) => player?.isBot)
+    .map((player) => Number(String(player.name || '').match(/(\d+)$/)?.[1] || 0))
+    .filter(Boolean));
+  let botNumber = 1;
+  while (usedNumbers.has(botNumber)) botNumber += 1;
+
+  const bot = createBot({ name: `Bot ${botNumber}`, color });
+  room.players[bot.id] = bot;
+  room.playerOrder.push(bot.id);
+  setAction(room, { type: 'botAdded', playerId: requesterId, botId: bot.id, color: bot.color });
+  addLog(room, `adicionou ${bot.name} (${labelColor(bot.color)}).`, requesterId);
+  return bot;
+}
+
+function removeBot(room, requesterId, botId) {
+  if (room.hostId !== requesterId) throw new Error('Somente o anfitrião pode remover bots.');
+  if (room.status !== 'lobby') throw new Error('Bots só podem ser removidos antes da partida.');
+  const bot = room.players[botId];
+  if (!bot?.isBot) throw new Error('Bot não encontrado.');
+  delete room.players[botId];
+  room.playerOrder = room.playerOrder.filter((id) => id !== botId);
+  setAction(room, { type: 'botRemoved', playerId: requesterId, botId });
+  addLog(room, `removeu ${bot.name} da sala.`, requesterId);
+  return bot;
 }
 
 function addSpectator(room, { name, socketId }) {
@@ -1073,6 +1129,81 @@ function resetPlayerForRound(player, initializeBoard = false, setup = {}) {
   player.advancedTrapArmed = [];
 }
 
+function markBotMovementReady(player) {
+  player.movesRemaining = 0;
+  player.mustMoveCarp = false;
+  player.correctionRequired = false;
+  player.movementReady = true;
+  player.lastMovedPieceId = null;
+  player.movementHistory = [];
+  player.specialAlert = '';
+  player.advancedTrapArmed = [];
+}
+
+function prepareBotInitialBoard(player) {
+  if (!player?.isBot || !player.board) return;
+  // O bot começa com a linha central completa e o vazio no centro da linha 4.
+  if (player.board[MIDDLE_ROW][CENTER.col] === null) {
+    player.board[MIDDLE_ROW][CENTER.col] = player.board[MIDDLE_ROW + 1][CENTER.col];
+    player.board[MIDDLE_ROW + 1][CENTER.col] = null;
+  }
+  markBotMovementReady(player);
+}
+
+function advanceBotBoardForRound(player, round) {
+  if (!player?.isBot || !player.board) return;
+  // Rotação fixa: L5→L1, L1→L2, L2→L3, L3→L4 e L4→L5.
+  const previousRows = player.board;
+  player.board = [previousRows[4], previousRows[0], previousRows[1], previousRows[2], previousRows[3]];
+
+  // Na última rodada o vazio retorna à linha central. Para a Correnteza sair
+  // sempre completa, a peça imediatamente abaixo sobe para ocupar esse vazio.
+  if (round === MAX_ROUNDS) {
+    const empty = findEmpty(player.board);
+    if (empty?.row === MIDDLE_ROW && empty.row + 1 < ROWS) {
+      player.board[empty.row][empty.col] = player.board[empty.row + 1][empty.col];
+      player.board[empty.row + 1][empty.col] = null;
+    }
+  }
+
+  // A rotação do bot é mecânica: não dispara especiais nem avançadas.
+  markBotMovementReady(player);
+}
+
+function prepareBotsForMovement(room, { initial = false } = {}) {
+  for (const id of room.playerOrder) {
+    const player = room.players[id];
+    if (!player?.isBot) continue;
+    if (initial) prepareBotInitialBoard(player);
+    else advanceBotBoardForRound(player, room.round);
+  }
+}
+
+function runBotDevelopment(room, player) {
+  if (!player?.isBot || !player.development) return;
+  const development = player.development;
+  while (!development.done) {
+    refreshDevelopmentOptions(player);
+    if (development.done) break;
+    if (!development.chosenColor) development.chosenColor = chooseRandom(development.eligibleColors);
+    if (!development.chosenColor) {
+      development.done = true;
+      break;
+    }
+    const candidates = carpPositions(player.board, [development.chosenColor]);
+    const position = chooseRandom(candidates);
+    if (!position) {
+      development.chosenColor = null;
+      refreshDevelopmentOptions(player);
+      continue;
+    }
+    replaceFish(room, player.id, position);
+  }
+  development.confirmed = true;
+  player.developmentHistory = [];
+  addLog(room, `${player.name} concluiu automaticamente a Venda e reposição.`, null, 'system');
+}
+
 function initializeMatch(room, restarted = false) {
   room.ruleset = normalizedRuleset(room.ruleset);
   room.status = 'playing';
@@ -1113,6 +1244,7 @@ function initializeMatch(room, restarted = false) {
     if (room.mode === 'solo' && advancedType) room.solo.advancedType = advancedType;
   }
 
+  prepareBotsForMovement(room, { initial: true });
   if (room.mode === 'solo') generateAutomaLine(room, room.players[room.playerOrder[0]]);
   setAction(room, { type: restarted ? 'restartComplete' : 'gameStart', ruleset: room.ruleset });
   addLog(room, restarted ? 'A partida foi reiniciada por acordo dos jogadores.' : `A partida começou no modo ${RULESET_LABELS[room.ruleset]}.`);
@@ -1140,14 +1272,20 @@ function requestRestart(room, requesterId) {
   if (!['playing', 'finished'].includes(room.status)) throw new Error('A partida ainda não começou.');
   if (!room.players[requesterId]) throw new Error('Somente jogadores podem solicitar reinício.');
   if (room.restartVote) throw new Error('Já existe uma votação de reinício em andamento.');
+  const botApprovals = room.playerOrder.filter((id) => room.players[id]?.isBot);
   room.restartVote = {
     id: randomId(6),
     requesterId,
-    approvals: [requesterId],
+    approvals: [...new Set([requesterId, ...botApprovals])],
     createdAt: Date.now()
   };
-  setAction(room, { type: 'restartRequested', playerId: requesterId });
   addLog(room, 'solicitou o reinício da partida.', requesterId);
+  if (room.playerOrder.every((id) => room.restartVote.approvals.includes(id))) {
+    restartGame(room);
+    return { restarted: true };
+  }
+  setAction(room, { type: 'restartRequested', playerId: requesterId });
+  return { restarted: false };
 }
 
 function respondRestart(room, playerId, accept) {
@@ -1481,6 +1619,10 @@ function beginDevelopment(room) {
   }
   setAction(room, { type: 'phaseChange', phase: 'development' });
   addLog(room, 'Começou a fase de Venda e reposição.');
+  for (const id of room.playerOrder) {
+    const player = room.players[id];
+    if (player?.isBot) runBotDevelopment(room, player);
+  }
   completeZeroDevelopments(room);
 }
 
@@ -1607,6 +1749,7 @@ function finishDevelopmentAndAdvance(room) {
   room.round += 1;
   room.phase = 'movement';
   for (const id of room.playerOrder) resetPlayerForRound(room.players[id], false);
+  prepareBotsForMovement(room);
   if (room.mode === 'solo') {
     const soloPlayer = room.players[room.playerOrder[0]];
     tryReturnSoloAdvancedPiece(room, soloPlayer);
@@ -1765,6 +1908,7 @@ function publicRoom(room) {
       name: player.name,
       color: player.color,
       connected: player.connected,
+      isBot: Boolean(player.isBot),
       board: player.board,
       movesRemaining: player.movesRemaining,
       mustMoveCarp: player.mustMoveCarp,
@@ -1813,7 +1957,7 @@ function publicRoom(room) {
     liveScores: room.playerOrder.every((id) => room.players[id].board) ? calculateScores(room) : null,
     winner: room.winner,
     rankingGeneral: room.rankingGeneral || null,
-    disconnectedPlayerIds: room.playerOrder.filter((id) => !room.players[id].connected),
+    disconnectedPlayerIds: room.playerOrder.filter((id) => !room.players[id].isBot && !room.players[id].connected),
     restartVote: room.restartVote ? {
       id: room.restartVote.id,
       requesterId: room.restartVote.requesterId,
@@ -1859,6 +2003,8 @@ module.exports = {
   RULESETS,
   createRoom,
   addPlayer,
+  addBot,
+  removeBot,
   addSpectator,
   removeMember,
   setGameRuleset,
