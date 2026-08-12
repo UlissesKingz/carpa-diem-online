@@ -805,6 +805,11 @@ legend { margin-bottom: 10px; font-weight: 850; }
 
 /* Assets PNG reduzidos apenas para a versão mobile.
    As dimensões/proporções visuais continuam sendo controladas pelas mesmas regras CSS. */
+/* Tabuleiros miniatura dos adversários usam os PNGs reduzidos também no desktop. */
+.tank.miniature .tank-water-layer,
+.tank.miniature .tank-liquid-layer { background-image: url('/assets/mobile/tank-water.png'); }
+.tank.miniature .tank-frame-layer { background-image: url('/assets/mobile/tank-frame.png'); }
+
 body[data-layout="mobile"] .tank-water-layer,
 body[data-layout="mobile"] .tank-liquid-layer { background-image: url('/assets/mobile/tank-water.png'); }
 body[data-layout="mobile"] .tank-frame-layer { background-image: url('/assets/mobile/tank-frame.png'); }

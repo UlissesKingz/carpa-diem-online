@@ -4,7 +4,8 @@
   const layout = document.body.dataset.layout || 'desktop';
   const config = window.CARPAS_CONFIG || {};
   const useMobilePngAssets = layout === 'mobile' || window.matchMedia('(max-width: 720px)').matches;
-  const PNG_ASSET_ROOT = useMobilePngAssets ? '/assets/mobile' : '/assets';
+  const MOBILE_PNG_ASSET_ROOT = '/assets/mobile';
+  const PNG_ASSET_ROOT = useMobilePngAssets ? MOBILE_PNG_ASSET_ROOT : '/assets';
   const RANKING_PLAYER_ID_KEY = 'carpaDiemRankingPlayerId';
 
   const COLORS = ['yellow', 'white', 'red', 'gray'];
@@ -40,6 +41,22 @@
     moneyBag: `${PNG_ASSET_ROOT}/money-bag.png`,
     logo: `${PNG_ASSET_ROOT}/logo.png`,
     fishAnimation: '/assets/fish-animation.gif'
+  };
+
+  const MINI_ASSETS = {
+    yellow: `${MOBILE_PNG_ASSET_ROOT}/carp-yellow.png`,
+    white: `${MOBILE_PNG_ASSET_ROOT}/carp-white.png`,
+    red: `${MOBILE_PNG_ASSET_ROOT}/carp-red.png`,
+    gray: `${MOBILE_PNG_ASSET_ROOT}/carp-gray.png`,
+    algae: `${MOBILE_PNG_ASSET_ROOT}/algae.png`,
+    shoal: `${MOBILE_PNG_ASSET_ROOT}/tesourinhas.png`,
+    sturgeon: `${MOBILE_PNG_ASSET_ROOT}/sturgeon.png`,
+    dojo: `${MOBILE_PNG_ASSET_ROOT}/dojo.png`,
+    papaTerra: `${MOBILE_PNG_ASSET_ROOT}/papa-terra.png`,
+    hook: `${MOBILE_PNG_ASSET_ROOT}/anzol.png`,
+    net: `${MOBILE_PNG_ASSET_ROOT}/rede.png`,
+    heron: `${MOBILE_PNG_ASSET_ROOT}/garca.png`,
+    cat: `${MOBILE_PNG_ASSET_ROOT}/gato.png`
   };
 
   const SOUND_URLS = {
@@ -491,7 +508,8 @@
     const animation = pieceAnimation(playerId, row, col, piece);
     const isAdvancedCell = ['hook', 'net'].includes(piece.type);
     const rotation = isAdvancedCell ? 0 : Number(piece.rotation || 0);
-    const src = piece.type === 'carp' ? ASSETS[piece.color] : ASSETS[piece.type];
+    const pieceAssets = tiny ? MINI_ASSETS : ASSETS;
+    const src = piece.type === 'carp' ? pieceAssets[piece.color] : pieceAssets[piece.type];
     const SPECIAL_LABELS = { shoal: 'Tesourinhas', sturgeon: 'Esturjão', dojo: 'Dojô', papaTerra: 'Papa-terra' };
     const ADVANCED_LABELS = { hook: 'Anzol', net: 'Rede', heron: 'Garça', cat: 'Gato' };
     const label = piece.type === 'carp'
@@ -553,7 +571,7 @@
             : (animateOverlayJump
               ? `--overlay-move-x:${overlayJump.from.col - state.lastAction.from.col};--overlay-move-y:${overlayJump.from.row - state.lastAction.from.row};`
               : '');
-          return `<span class="advanced-overlay-motion ${overlayMotionClass}" style="${overlayMotionStyle}"><span class="advanced-overlay-position" style="--overlay-index:${index}"><span class="advanced-overlay-facing" style="--advanced-facing-scale:${facingScale}"><img class="advanced-overlay-art advanced-overlay-${overlay.type} ${overlayEmphasisClass}" src="${ASSETS[overlay.type]}" alt="" title="${overlayLabel}" aria-hidden="true" draggable="false"></span></span></span>`;
+          return `<span class="advanced-overlay-motion ${overlayMotionClass}" style="${overlayMotionStyle}"><span class="advanced-overlay-position" style="--overlay-index:${index}"><span class="advanced-overlay-facing" style="--advanced-facing-scale:${facingScale}"><img class="advanced-overlay-art advanced-overlay-${overlay.type} ${overlayEmphasisClass}" src="${pieceAssets[overlay.type]}" alt="" title="${overlayLabel}" aria-hidden="true" draggable="false"></span></span></span>`;
         }).join('')
       : '';
 
@@ -581,14 +599,15 @@
   }
 
 
-  function advancedCaptureGhostHtml(playerId, row, col) {
+  function advancedCaptureGhostHtml(playerId, row, col, { tiny = false } = {}) {
     if (!animateCurrentAction || !state?.lastAction || state.lastAction.playerId !== playerId) return '';
     if (isCompactMobile() && identity.role === 'player' && playerId !== identity.memberId) return '';
     const capture = state.lastAction.advanced?.captures?.find((item) =>
       item.capturedPosition?.row === row && item.capturedPosition?.col === col
     );
-    if (!capture?.capturedColor || !ASSETS[capture.capturedColor]) return '';
-    return `<span class="captured-carp-ghost" aria-hidden="true"><img src="${ASSETS[capture.capturedColor]}" alt=""></span>`;
+    const ghostAssets = tiny ? MINI_ASSETS : ASSETS;
+    if (!capture?.capturedColor || !ghostAssets[capture.capturedColor]) return '';
+    return `<span class="captured-carp-ghost" aria-hidden="true"><img src="${ghostAssets[capture.capturedColor]}" alt=""></span>`;
   }
 
   function boardHtml(player, { interactive = false, miniature = false, spectator = false } = {}) {
@@ -607,7 +626,7 @@
         cells.push(`
           <button class="tank-cell ${middle} ${canReplace ? 'replaceable' : ''}" ${interactive ? '' : 'disabled'} data-row="${rowIndex}" data-col="${colIndex}" aria-label="Linha ${rowIndex + 1}, coluna ${colIndex + 1}">
             ${createPieceHtml(piece, player.id, rowIndex, colIndex, { tiny: miniature })}
-            ${advancedCaptureGhostHtml(player.id, rowIndex, colIndex)}
+            ${advancedCaptureGhostHtml(player.id, rowIndex, colIndex, { tiny: miniature })}
           </button>`);
       });
     });
