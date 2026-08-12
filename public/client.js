@@ -5,7 +5,9 @@
   const config = window.CARPAS_CONFIG || {};
   const useMobilePngAssets = layout === 'mobile' || window.matchMedia('(max-width: 720px)').matches;
   const MOBILE_PNG_ASSET_ROOT = '/assets/mobile';
+  const MOBILE_MINI_PNG_ASSET_ROOT = '/assets/mobile-mini';
   const PNG_ASSET_ROOT = useMobilePngAssets ? MOBILE_PNG_ASSET_ROOT : '/assets';
+  const MINI_PNG_ASSET_ROOT = useMobilePngAssets ? MOBILE_MINI_PNG_ASSET_ROOT : MOBILE_PNG_ASSET_ROOT;
   const RANKING_PLAYER_ID_KEY = 'carpaDiemRankingPlayerId';
 
   const COLORS = ['yellow', 'white', 'red', 'gray'];
@@ -44,19 +46,19 @@
   };
 
   const MINI_ASSETS = {
-    yellow: `${MOBILE_PNG_ASSET_ROOT}/carp-yellow.png`,
-    white: `${MOBILE_PNG_ASSET_ROOT}/carp-white.png`,
-    red: `${MOBILE_PNG_ASSET_ROOT}/carp-red.png`,
-    gray: `${MOBILE_PNG_ASSET_ROOT}/carp-gray.png`,
-    algae: `${MOBILE_PNG_ASSET_ROOT}/algae.png`,
-    shoal: `${MOBILE_PNG_ASSET_ROOT}/tesourinhas.png`,
-    sturgeon: `${MOBILE_PNG_ASSET_ROOT}/sturgeon.png`,
-    dojo: `${MOBILE_PNG_ASSET_ROOT}/dojo.png`,
-    papaTerra: `${MOBILE_PNG_ASSET_ROOT}/papa-terra.png`,
-    hook: `${MOBILE_PNG_ASSET_ROOT}/anzol.png`,
-    net: `${MOBILE_PNG_ASSET_ROOT}/rede.png`,
-    heron: `${MOBILE_PNG_ASSET_ROOT}/garca.png`,
-    cat: `${MOBILE_PNG_ASSET_ROOT}/gato.png`
+    yellow: `${MINI_PNG_ASSET_ROOT}/carp-yellow.png`,
+    white: `${MINI_PNG_ASSET_ROOT}/carp-white.png`,
+    red: `${MINI_PNG_ASSET_ROOT}/carp-red.png`,
+    gray: `${MINI_PNG_ASSET_ROOT}/carp-gray.png`,
+    algae: `${MINI_PNG_ASSET_ROOT}/algae.png`,
+    shoal: `${MINI_PNG_ASSET_ROOT}/tesourinhas.png`,
+    sturgeon: `${MINI_PNG_ASSET_ROOT}/sturgeon.png`,
+    dojo: `${MINI_PNG_ASSET_ROOT}/dojo.png`,
+    papaTerra: `${MINI_PNG_ASSET_ROOT}/papa-terra.png`,
+    hook: `${MINI_PNG_ASSET_ROOT}/anzol.png`,
+    net: `${MINI_PNG_ASSET_ROOT}/rede.png`,
+    heron: `${MINI_PNG_ASSET_ROOT}/garca.png`,
+    cat: `${MINI_PNG_ASSET_ROOT}/gato.png`
   };
 
   const SOUND_URLS = {
@@ -325,8 +327,9 @@
   socket.on('roomState', (room) => {
     serverConnected = true;
     reconnectingToRoom = false;
+    const previousState = state;
     const isNewAction = Boolean(room.lastAction && room.lastAction.id !== lastAnimatedActionId);
-    const phaseChanged = state?.phase && state.phase !== room.phase;
+    const phaseChanged = previousState?.phase && previousState.phase !== room.phase;
     const ownMovementSucceeded = room.lastAction?.playerId === identity.memberId
       && ['move', 'correctionMove', 'undo'].includes(room.lastAction?.type);
     state = room;
@@ -335,7 +338,15 @@
     if (phaseChanged || ownMovementSucceeded || room.phase !== 'movement') movementError = '';
     localRestartConfirm = false;
     animateCurrentAction = isNewAction;
-    render();
+
+    // No mobile, durante a maior parte da Fase de movimentação, atualiza só o
+    // tanque/jogador que realmente mudou e os pequenos painéis necessários.
+    // Isso evita destruir e recriar todos os 2–4 tabuleiros a cada movimento.
+    const usedMobilePatch = isNewAction
+      && canUseMobileMovementPatch(previousState, room, room.lastAction)
+      && updateMobileMovementUi(room.lastAction);
+    if (!usedMobilePatch) render();
+
     if (isNewAction) playActionSound(room.lastAction);
     if (room.lastAction) lastAnimatedActionId = room.lastAction.id;
   });
@@ -1052,13 +1063,15 @@
     return badges.length ? `<div class="opponent-flow-badges">${badges.join('')}</div>` : '<div class="opponent-flow-badges neutral"><span class="opponent-flow-badge neutral">Sem troca direta com você</span></div>';
   }
 
+  function opponentCardHtml(id) {
+    const player = state.players[id];
+    if (!player) return '';
+    const status = playerPhaseStatus(player);
+    return `<article class="opponent-card ${player.isBot ? 'bot-opponent-card' : ''}" data-player-id="${escapeHtml(id)}"><header>${playerNameChip(player)}${colorBadge(player.color)}${botBadgeHtml(player, true)}</header>${opponentFlowBadgesHtml(id)}${boardHtml(player, { miniature: true })}<footer class="${status.waiting ? 'phase-waiting-footer' : ''}"><span class="opponent-status-text">${player.isBot ? '<span class="bot-status-dot small" aria-hidden="true">◆</span>' : `<span class="connection ${player.connected ? 'online' : ''}"></span>`}${player.isBot ? 'Bot automático' : status.text}</span>${player.isBot ? '' : opponentMovementCounterHtml(player)}</footer></article>`;
+  }
+
   function opponentsHtml() {
-    return orderedOpponentIds()
-      .map((id) => {
-        const player = state.players[id];
-        const status = playerPhaseStatus(player);
-        return `<article class="opponent-card ${player.isBot ? 'bot-opponent-card' : ''}"><header>${playerNameChip(player)}${colorBadge(player.color)}${botBadgeHtml(player, true)}</header>${opponentFlowBadgesHtml(id)}${boardHtml(player, { miniature: true })}<footer class="${status.waiting ? 'phase-waiting-footer' : ''}"><span class="opponent-status-text">${player.isBot ? '<span class="bot-status-dot small" aria-hidden="true">◆</span>' : `<span class="connection ${player.connected ? 'online' : ''}"></span>`}${player.isBot ? 'Bot automático' : status.text}</span>${player.isBot ? '' : opponentMovementCounterHtml(player)}</footer></article>`;
-      }).join('');
+    return orderedOpponentIds().map(opponentCardHtml).join('');
   }
 
   function automaLineHtml() {
@@ -1409,6 +1422,141 @@
     });
   }
 
+  function preferredInMiddleCount(current) {
+    return current?.board
+      ? current.board[state.constants.middleRow].filter((piece) => piece?.type === 'carp' && piece.color === current.color).length
+      : 0;
+  }
+
+  function playerCanUndo(current) {
+    if (!current) return false;
+    return state.phase === 'movement'
+      ? !current.movementReady && current.movementHistoryLength > 0
+      : state.phase === 'development' && !developmentIsConfirmed(current.development) && current.developmentHistoryLength > 0;
+  }
+
+  function playerCanFinishMovement(current) {
+    return Boolean(current
+      && current.movesRemaining === 0
+      && !current.mustMoveCarp
+      && !current.correctionRequired
+      && !current.movementReady);
+  }
+
+  function bindTankCopyCode() {
+    document.querySelector('.tank-copy-code')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      const code = String(button.dataset.code || state.code || '');
+      try {
+        await navigator.clipboard.writeText(code);
+        button.textContent = 'Código copiado';
+        window.setTimeout(() => {
+          if (button.isConnected) button.textContent = 'Copiar código da sala';
+        }, 1400);
+      } catch {
+        notice = 'Não foi possível copiar o código da sala.';
+        render();
+      }
+    });
+  }
+
+  function bindOwnTankCells() {
+    document.querySelectorAll('.my-tank-card .tank-cell').forEach((cell) => {
+      cell.addEventListener('click', async () => {
+        const row = Number(cell.dataset.row);
+        const col = Number(cell.dataset.col);
+        if (state.phase === 'movement') {
+          await emit('movePiece', { from: { row, col } });
+        }
+        if (state.phase === 'development') emit('replaceFish', { position: { row, col } });
+      });
+    });
+  }
+
+  function bindPlayerPhaseControls() {
+    document.querySelector('#undoMove')?.addEventListener('click', async () => {
+      await emit('undoMove');
+    });
+    document.querySelector('#buyExtraMove')?.addEventListener('click', () => emit('buyExtraMove'));
+    document.querySelector('#finishMovement')?.addEventListener('click', () => emit('finishMovement'));
+    document.querySelector('#finishDevelopment')?.addEventListener('click', () => emit('finishDevelopment'));
+    document.querySelectorAll('.color-target').forEach((button) => button.addEventListener('click', () => emit('chooseDevelopmentColor', { color: button.dataset.color })));
+    document.querySelectorAll('.try-next-phase').forEach((button) => button.addEventListener('click', () => {
+      const message = waitingForOtherPlayersMessage();
+      if (button.dataset.waitPhase === 'movement') movementError = message;
+      else notice = message;
+      render();
+    }));
+  }
+
+  function canUseMobileMovementPatch(previousState, nextState, action) {
+    if (layout !== 'mobile' || identity.role !== 'player') return false;
+    if (!previousState || previousState.status !== 'playing' || nextState?.status !== 'playing') return false;
+    if (previousState.code !== nextState.code || previousState.phase !== 'movement' || nextState.phase !== 'movement') return false;
+    if (Number(previousState.round) !== Number(nextState.round) || roundIntroRound) return false;
+    if (!['move', 'correctionMove', 'undo', 'extraMovePurchased'].includes(action?.type)) return false;
+    if (!document.querySelector('.game-shell.mobile .my-tank-card')) return false;
+
+    const previousCurrent = previousState.players?.[identity.memberId];
+    const nextCurrent = nextState.players?.[identity.memberId];
+    if (!previousCurrent || !nextCurrent) return false;
+
+    // Quando nasce/desaparece o botão mobile de concluir movimentação, fazemos
+    // o render completo para preservar a ordem/layout de todos os blocos.
+    const previousFinish = previousCurrent.movesRemaining === 0
+      && !previousCurrent.mustMoveCarp
+      && !previousCurrent.correctionRequired
+      && !previousCurrent.movementReady;
+    const nextFinish = nextCurrent.movesRemaining === 0
+      && !nextCurrent.mustMoveCarp
+      && !nextCurrent.correctionRequired
+      && !nextCurrent.movementReady;
+    if (previousFinish !== nextFinish || previousCurrent.movementReady !== nextCurrent.movementReady) return false;
+
+    return true;
+  }
+
+  function refreshMobileLiveScorePanel() {
+    const scorePanel = document.querySelector('.left-rail > .population-panel');
+    if (!scorePanel) return;
+    const html = state.mode === 'solo' ? soloScorePanelHtml() : populationScorePanelHtml();
+    if (html) scorePanel.outerHTML = html;
+  }
+
+  function updateMobileMovementUi(action) {
+    const current = me();
+    if (!current) return false;
+
+    if (action?.playerId === identity.memberId) {
+      const boardWrap = document.querySelector('.my-tank-card .player-board-wrap');
+      if (!boardWrap) return false;
+      boardWrap.innerHTML = `${boardHtml(current, { interactive: true })}${roundIntroHtml()}`;
+
+      const middleCount = document.querySelector('.my-tank-card .middle-count strong');
+      if (middleCount) middleCount.textContent = String(preferredInMiddleCount(current));
+      const undoButton = document.querySelector('.my-tank-card #undoMove');
+      if (undoButton) {
+        undoButton.outerHTML = `<button id="undoMove" class="undo-button" ${playerCanUndo(current) ? '' : 'disabled'}>↶ Desfazer jogada</button>`;
+      }
+
+      const movementPanelNode = document.querySelector('.right-rail > .action-panel');
+      if (movementPanelNode) movementPanelNode.outerHTML = movementPanel(current);
+
+      bindOwnTankCells();
+      bindPlayerPhaseControls();
+    } else if (action?.playerId && state.players?.[action.playerId]) {
+      const opponentNode = document.querySelector(`.opponent-card[data-player-id="${action.playerId}"]`);
+      if (opponentNode) opponentNode.outerHTML = opponentCardHtml(action.playerId);
+    }
+
+    refreshMobileLiveScorePanel();
+
+    const logPanel = document.querySelector('.right-rail > .log-panel');
+    if (logPanel) logPanel.outerHTML = logPanelHtml();
+
+    return true;
+  }
+
   function playerGameScreen() {
     const current = me();
     if (!current) return lobbyEntry();
@@ -1419,12 +1567,8 @@
         : state.phase === 'circulation'
           ? circulationPanel()
           : '';
-    const preferredInMiddle = current.board
-      ? current.board[state.constants.middleRow].filter((piece) => piece?.type === 'carp' && piece.color === current.color).length
-      : 0;
-    const canUndo = state.phase === 'movement'
-      ? !current.movementReady && current.movementHistoryLength > 0
-      : state.phase === 'development' && !developmentIsConfirmed(current.development) && current.developmentHistoryLength > 0;
+    const preferredInMiddle = preferredInMiddleCount(current);
+    const canUndo = playerCanUndo(current);
 
     app.innerHTML = `
       <div class="game-shell ${layout}">
@@ -1464,44 +1608,9 @@
         </main>
       </div>`;
 
-    document.querySelector('.tank-copy-code')?.addEventListener('click', async (event) => {
-      const button = event.currentTarget;
-      const code = String(button.dataset.code || state.code || '');
-      try {
-        await navigator.clipboard.writeText(code);
-        button.textContent = 'Código copiado';
-        window.setTimeout(() => {
-          if (button.isConnected) button.textContent = 'Copiar código da sala';
-        }, 1400);
-      } catch {
-        notice = 'Não foi possível copiar o código da sala.';
-        render();
-      }
-    });
-
-    document.querySelectorAll('.my-tank-card .tank-cell').forEach((cell) => {
-      cell.addEventListener('click', async () => {
-        const row = Number(cell.dataset.row);
-        const col = Number(cell.dataset.col);
-        if (state.phase === 'movement') {
-          await emit('movePiece', { from: { row, col } });
-        }
-        if (state.phase === 'development') emit('replaceFish', { position: { row, col } });
-      });
-    });
-    document.querySelector('#undoMove')?.addEventListener('click', async () => {
-      await emit('undoMove');
-    });
-    document.querySelector('#buyExtraMove')?.addEventListener('click', () => emit('buyExtraMove'));
-    document.querySelector('#finishMovement')?.addEventListener('click', () => emit('finishMovement'));
-    document.querySelector('#finishDevelopment')?.addEventListener('click', () => emit('finishDevelopment'));
-    document.querySelectorAll('.color-target').forEach((button) => button.addEventListener('click', () => emit('chooseDevelopmentColor', { color: button.dataset.color })));
-    document.querySelectorAll('.try-next-phase').forEach((button) => button.addEventListener('click', () => {
-      const message = waitingForOtherPlayersMessage();
-      if (button.dataset.waitPhase === 'movement') movementError = message;
-      else notice = message;
-      render();
-    }));
+    bindTankCopyCode();
+    bindOwnTankCells();
+    bindPlayerPhaseControls();
     bindCommonGameActions();
   }
 

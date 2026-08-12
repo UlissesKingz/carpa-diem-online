@@ -2460,6 +2460,8 @@ body[data-layout="mobile"] .tank {
   filter: none;
 }
 
+body[data-layout="mobile"] .piece-shell-carp,
+body[data-layout="mobile"] .piece-shell-algae,
 body[data-layout="mobile"] .piece-shell-sturgeon,
 body[data-layout="mobile"] .piece-shell-dojo,
 body[data-layout="mobile"] .piece-shell-papaTerra,
@@ -2467,7 +2469,43 @@ body[data-layout="mobile"] .piece-shell-shoal,
 body[data-layout="mobile"] .piece-shell-hook,
 body[data-layout="mobile"] .piece-shell-net,
 body[data-layout="mobile"] .advanced-overlay-art {
-  filter: none;
+  filter: none !important;
+}
+
+/* Em celular, não mantenha dezenas de camadas GPU reservadas o tempo todo.
+   O will-change entra somente nos elementos que estão realmente animando. */
+body[data-layout="mobile"] .piece-shell,
+body[data-layout="mobile"] .piece-orientation,
+body[data-layout="mobile"] .piece-art,
+body[data-layout="mobile"] .advanced-overlay-motion {
+  will-change: auto !important;
+}
+
+body[data-layout="mobile"] .animate-slide,
+body[data-layout="mobile"] .animate-special,
+body[data-layout="mobile"] .animate-shoal,
+body[data-layout="mobile"] .animate-replace,
+body[data-layout="mobile"] .animate-undo,
+body[data-layout="mobile"] .animate-line-out,
+body[data-layout="mobile"] .animate-line-in,
+body[data-layout="mobile"] .animate-advanced-capture-lunge,
+body[data-layout="mobile"] .animate-advanced-overlay-capture,
+body[data-layout="mobile"] .animate-advanced-overlay-jump {
+  will-change: transform, opacity !important;
+}
+
+/* Painéis/tabuleiros fora da área visível podem deixar de ser pintados até
+   o usuário se aproximar deles. Em navegadores sem suporte, é ignorado. */
+body[data-layout="mobile"] .opponent-card,
+body[data-layout="mobile"] .piece-guide-card,
+body[data-layout="mobile"] .population-panel,
+body[data-layout="mobile"] .log-panel {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 220px;
+}
+
+body[data-layout="mobile"] .opponent-card {
+  contain: layout style;
 }
 
 body[data-layout="mobile"] .last-moved-art,
@@ -2949,3 +2987,23 @@ body[data-layout="mobile"] .opponent-flow-badge { font-size: .58rem; padding: 3p
   .lobby-bot-controls { align-items: stretch; flex-direction: column; }
   .lobby-bot-controls .secondary-button { width: 100%; }
 }
+
+
+/* Mobile: o tanque principal mantém os PNGs de /assets/mobile.
+   As miniaturas dos adversários usam uma categoria ainda mais leve. */
+body[data-layout="mobile"] .tank.miniature .tank-water-layer,
+body[data-layout="mobile"] .tank.miniature .tank-liquid-layer {
+  background-image: url('/assets/mobile-mini/tank-water.png');
+}
+body[data-layout="mobile"] .tank.miniature .tank-frame-layer {
+  background-image: url('/assets/mobile-mini/tank-frame.png');
+}
+
+/* Mobile horizontal: mantém a mesma sequência lógica do vertical.
+   Evita que "Resumo das peças" apareça entre os adversários e o tanque do jogador. */
+body[data-layout="mobile"] .game-stage > .my-tank-card { order: 1; }
+body[data-layout="mobile"] .mobile-phase-confirm-slot { order: 2; }
+body[data-layout="mobile"] .right-rail > .action-panel { order: 3; }
+body[data-layout="mobile"] .piece-guide-slot { order: 4; }
+body[data-layout="mobile"] .left-rail > .population-panel { order: 5; }
+body[data-layout="mobile"] .right-rail > .log-panel { order: 6; }
