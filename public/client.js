@@ -1594,7 +1594,7 @@
               <p class="eyebrow tank-round-label">${roundLabel()}</p>
               <h1 class="tank-player-name">${escapeHtml(current.name)}</h1>
               <span class="preferred-carp-label">Sua carpa preferida:<img src="${ASSETS[current.color]}" alt="Carpa ${COLOR_LABELS[current.color]}"></span>
-              <div class="middle-count">Sua cor na linha <strong>${preferredInMiddle}</strong></div>
+              <div class="middle-count">Sua cor na linha central <strong>${preferredInMiddle}</strong></div>
               <button id="undoMove" class="undo-button" ${canUndo ? '' : 'disabled'}>↶ Desfazer jogada</button>
             </header>
             <div class="player-board-wrap">
